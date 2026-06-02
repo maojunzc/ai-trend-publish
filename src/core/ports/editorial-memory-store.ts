@@ -1,6 +1,7 @@
 export interface EditorialArticleMemoryInput {
   runId: string;
   profileId?: string;
+  accountId?: string;
   title: string;
   thesis?: string;
   keywords: string[];
@@ -36,6 +37,7 @@ export type EditorialFeedbackRating = "good" | "ok" | "bad";
 export interface EditorialRunFeedbackInput {
   runId: string;
   profileId?: string;
+  accountId?: string;
   rating: EditorialFeedbackRating;
   note?: string;
   createdAt?: string;
@@ -43,6 +45,25 @@ export interface EditorialRunFeedbackInput {
 }
 
 export interface EditorialRunFeedback extends EditorialRunFeedbackInput {
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type EditorialTopicFeedbackAction = "lead" | "adopt" | "skip";
+
+export interface EditorialTopicFeedbackInput {
+  runId: string;
+  topicId: string;
+  profileId?: string;
+  accountId?: string;
+  action: EditorialTopicFeedbackAction;
+  title?: string;
+  reason?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface EditorialTopicFeedback extends EditorialTopicFeedbackInput {
   createdAt: string;
   updatedAt: string;
 }
@@ -70,11 +91,14 @@ export interface EditorialMemoryContext {
   recentArticles: EditorialArticleMemory[];
   sourcePerformance: SourcePerformanceRecord[];
   recentFeedback: EditorialRunFeedback[];
+  recentTopicFeedback: EditorialTopicFeedback[];
 }
 
 export interface EditorialMemoryStore {
   getContext(options?: {
     profileId?: string;
+    accountId?: string;
+    strictAccount?: boolean;
     recentLimit?: number;
     sourceLimit?: number;
   }): Promise<EditorialMemoryContext>;
@@ -91,6 +115,20 @@ export interface EditorialMemoryStore {
   saveFeedback(input: EditorialRunFeedbackInput): Promise<EditorialRunFeedback>;
 
   deleteFeedback(runId: string): Promise<boolean>;
+
+  listTopicFeedback(options?: {
+    runId?: string;
+    profileId?: string;
+    accountId?: string;
+    strictAccount?: boolean;
+    limit?: number;
+  }): Promise<EditorialTopicFeedback[]>;
+
+  saveTopicFeedback(
+    input: EditorialTopicFeedbackInput,
+  ): Promise<EditorialTopicFeedback>;
+
+  deleteTopicFeedback(runId: string, topicId: string): Promise<boolean>;
 }
 
 export class NoopEditorialMemoryStore implements EditorialMemoryStore {
@@ -99,6 +137,7 @@ export class NoopEditorialMemoryStore implements EditorialMemoryStore {
       recentArticles: [],
       sourcePerformance: [],
       recentFeedback: [],
+      recentTopicFeedback: [],
     });
   }
 
@@ -126,6 +165,25 @@ export class NoopEditorialMemoryStore implements EditorialMemoryStore {
   }
 
   deleteFeedback(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  listTopicFeedback(): Promise<EditorialTopicFeedback[]> {
+    return Promise.resolve([]);
+  }
+
+  saveTopicFeedback(
+    input: EditorialTopicFeedbackInput,
+  ): Promise<EditorialTopicFeedback> {
+    const timestamp = new Date().toISOString();
+    return Promise.resolve({
+      ...input,
+      createdAt: input.createdAt ?? timestamp,
+      updatedAt: input.updatedAt ?? timestamp,
+    });
+  }
+
+  deleteTopicFeedback(): Promise<boolean> {
     return Promise.resolve(false);
   }
 }

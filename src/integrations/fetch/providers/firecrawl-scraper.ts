@@ -152,8 +152,9 @@ export class FireCrawlScraper implements ContentScraper {
         },
       }));
     } catch (error) {
-      logger.error("FireCrawl抓取失败:", error);
-      throw error;
+      const normalizedError = normalizeFirecrawlError(error);
+      logger.error("FireCrawl抓取失败:", normalizedError);
+      throw normalizedError;
     }
   }
 
@@ -248,4 +249,19 @@ export class FireCrawlScraper implements ContentScraper {
 
 function isArticleDetailMode(options?: ScraperOptions): boolean {
   return options?.filters?.mode === "article-detail";
+}
+
+function normalizeFirecrawlError(error: unknown): Error {
+  if (error instanceof Error) {
+    if (
+      error instanceof TypeError &&
+      error.message.includes("reading 'status'")
+    ) {
+      return new Error(
+        "FireCrawl 请求失败：SDK 未返回响应状态，通常是网络中断、服务端限流或上游响应异常",
+      );
+    }
+    return error;
+  }
+  return new Error(String(error));
 }

@@ -5,10 +5,14 @@ import type {
   ArticleRuntimeProfileDetail,
   CapabilityProfile,
   ConfigSummary,
+  EditorialTopicFeedback,
+  EditorialTopicFeedbackAction,
   HealthResponse,
   TriggerMatrixRunPayload,
   TriggerRunPayload,
+  WeixinAccountInsight,
   WeixinAccountProfile,
+  WeixinAccountRelayCheck,
 } from "./types.ts";
 
 export async function parseApiError(response: Response) {
@@ -86,6 +90,21 @@ export function getWeixinAccounts(apiKey: string) {
   );
 }
 
+export function getWeixinAccountInsights(apiKey: string) {
+  return apiJson<{ insights: WeixinAccountInsight[] }>(
+    "/api/accounts/insights",
+    apiKey,
+  );
+}
+
+export function checkWeixinAccountRelay(apiKey: string, accountId: string) {
+  return apiJson<{ check: WeixinAccountRelayCheck }>(
+    `/api/config/weixin/accounts/${encodeURIComponent(accountId)}/relay-check`,
+    apiKey,
+    { method: "POST" },
+  );
+}
+
 export function getRuns(apiKey: string) {
   return apiJson<{ runs: ArticleRunRecord[] }>("/api/runs", apiKey);
 }
@@ -116,4 +135,49 @@ export function triggerMatrixRun(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getTopicFeedback(apiKey: string, runId: string) {
+  return apiJson<{ feedback: EditorialTopicFeedback[] }>(
+    `/api/runs/${encodeURIComponent(runId)}/topic-feedback`,
+    apiKey,
+  );
+}
+
+export function saveTopicFeedback(
+  apiKey: string,
+  runId: string,
+  topicId: string,
+  payload: {
+    action: EditorialTopicFeedbackAction;
+    title?: string;
+    reason?: string;
+    profileId?: string;
+    accountId?: string;
+  },
+) {
+  return apiJson<{ feedback: EditorialTopicFeedback }>(
+    `/api/runs/${encodeURIComponent(runId)}/topic-feedback/${
+      encodeURIComponent(topicId)
+    }`,
+    apiKey,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function deleteTopicFeedback(
+  apiKey: string,
+  runId: string,
+  topicId: string,
+) {
+  return apiJson<{ deleted: boolean }>(
+    `/api/runs/${encodeURIComponent(runId)}/topic-feedback/${
+      encodeURIComponent(topicId)
+    }`,
+    apiKey,
+    { method: "DELETE" },
+  );
 }

@@ -106,7 +106,7 @@ export function Textarea(
 export function Badge(
   { children, tone = "muted", className, title }: {
     children: React.ReactNode;
-    tone?: "success" | "danger" | "info" | "muted";
+    tone?: "success" | "danger" | "info" | "warning" | "muted";
     className?: string;
     title?: string;
   },
@@ -117,6 +117,8 @@ export function Badge(
     ? "red"
     : tone === "info"
     ? "blue"
+    : tone === "warning"
+    ? "orange"
     : "gray";
   return (
     <MantineBadge

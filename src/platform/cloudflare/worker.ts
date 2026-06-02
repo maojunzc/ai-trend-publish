@@ -24,6 +24,8 @@ import { D1RuntimeConfigStore } from "@src/platform/cloudflare/d1-runtime-config
 import { D1EditorialMemoryStore } from "@src/platform/cloudflare/d1-editorial-memory-store.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
 import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
+import { buildWeixinAccountInsights } from "@src/app/weixin-article/account-insights.ts";
+import { syncMatrixParentRun } from "@src/app/weixin-article/matrix-run-summary.ts";
 import { handleRuntimeConfigApi } from "@src/app/weixin-article/runtime/runtime-config-api.ts";
 import { WeixinPublisher } from "@src/integrations/publish/providers/weixin-publisher.ts";
 import { WeixinRelayPublisher } from "@src/integrations/publish/providers/weixin-relay-publisher.ts";
@@ -158,6 +160,7 @@ export class WeixinArticleCloudflareWorkflow
       try {
         await initializeCloudflareConfig(this.env);
         await this.definition.run(workflowEvent, toStepContext(step));
+        await syncCloudflareMatrixParentRun(this.env, workflowEvent);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error("[cloudflare-workflow] run failed", {
@@ -166,6 +169,7 @@ export class WeixinArticleCloudflareWorkflow
           stack: error instanceof Error ? error.stack : undefined,
         });
         await markCloudflareRunFailed(this.env, workflowEvent, message);
+        await syncCloudflareMatrixParentRun(this.env, workflowEvent);
         throw error;
       }
     });
@@ -189,6 +193,27 @@ async function markCloudflareRunFailed(
     });
   }
   await store.failRun(runId, error);
+}
+
+async function syncCloudflareMatrixParentRun(
+  env: CloudflareEnv,
+  event: WorkflowEvent<WeixinArticleWorkflowInput>,
+): Promise<void> {
+  const parentRunId = event.payload.parentRunId;
+  if (!parentRunId) return;
+  try {
+    const stores = createStores(env);
+    await syncMatrixParentRun(
+      stores.runStateStore,
+      parentRunId,
+      { artifactStore: stores.artifactStore },
+    );
+  } catch (error) {
+    console.warn("[cloudflare-workflow] matrix parent sync skipped", {
+      parentRunId,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function initializeCloudflareConfig(env: CloudflareEnv): Promise<void> {
@@ -360,6 +385,27 @@ async function handleConfigSummaryRequest(
   );
 }
 
+async function handleAccountInsightsRequest(
+  request: Request,
+  env: CloudflareEnv,
+): Promise<Response> {
+  const unauthorized = await verifyCloudflareAuth(request, env);
+  if (unauthorized) return unauthorized;
+
+  await initializeCloudflareConfig(env);
+  const stores = createStores(env);
+  const config = await getAppConfig();
+  await seedArticleRuntimeConfig(stores.runtimeConfigStore, config);
+  const accounts = await stores.runtimeConfigStore.listWeixinAccountProfiles();
+  const runs = await stores.runStateStore.listRuns(500);
+  const insights = await buildWeixinAccountInsights({
+    accounts,
+    runs,
+    editorialMemoryStore: stores.editorialMemoryStore,
+  });
+  return Response.json({ insights });
+}
+
 async function handleRunsRequest(
   request: Request,
   env: CloudflareEnv,
@@ -433,7 +479,18 @@ async function handleRunsRequest(
         },
       });
     }
-    return Response.json({ success: true, matrixRunId, childRunIds });
+    const aggregation = await syncMatrixParentRun(
+      stores.runStateStore,
+      matrixRunId,
+      { artifactStore: stores.artifactStore },
+    );
+    return Response.json({
+      success: true,
+      matrixRunId,
+      childRunIds,
+      status: aggregation?.status,
+      summary: aggregation?.summary,
+    });
   }
 
   if (request.method === "POST" && pathname === "/api/runs") {
@@ -498,6 +555,7 @@ async function handleRunsRequest(
         rating?: string;
         note?: string;
         profileId?: string;
+        accountId?: string;
       };
       const rating = normalizeFeedbackRating(payload.rating);
       if (!rating) {
@@ -506,11 +564,15 @@ async function handleRunsRequest(
           { status: 400 },
         );
       }
+      const run = await stores.runStateStore.getRun(runId);
       const feedback = await stores.editorialMemoryStore.saveFeedback({
         runId,
         profileId: typeof payload.profileId === "string"
           ? payload.profileId
-          : undefined,
+          : run?.profileId,
+        accountId: typeof payload.accountId === "string"
+          ? payload.accountId
+          : run?.accountId,
         rating,
         note: typeof payload.note === "string" ? payload.note : undefined,
       });
@@ -518,6 +580,60 @@ async function handleRunsRequest(
     }
     if (request.method === "DELETE") {
       const deleted = await stores.editorialMemoryStore.deleteFeedback(runId);
+      return Response.json({ deleted });
+    }
+  }
+
+  const topicFeedbackMatch = pathname.match(
+    /^\/api\/runs\/([^/]+)\/topic-feedback(?:\/([^/]+))?$/,
+  );
+  if (topicFeedbackMatch) {
+    const runId = decodeURIComponent(topicFeedbackMatch[1]);
+    const topicId = topicFeedbackMatch[2]
+      ? decodeURIComponent(topicFeedbackMatch[2])
+      : undefined;
+    if (request.method === "GET") {
+      const feedback = await stores.editorialMemoryStore.listTopicFeedback({
+        runId,
+      });
+      return Response.json({ feedback });
+    }
+    if (request.method === "PUT" && topicId) {
+      const payload = await request.json().catch(() => ({})) as {
+        action?: string;
+        title?: string;
+        reason?: string;
+        profileId?: string;
+        accountId?: string;
+      };
+      const action = normalizeTopicFeedbackAction(payload.action);
+      if (!action) {
+        return Response.json(
+          { error: "action 必须是 lead / adopt / skip" },
+          { status: 400 },
+        );
+      }
+      const run = await stores.runStateStore.getRun(runId);
+      const feedback = await stores.editorialMemoryStore.saveTopicFeedback({
+        runId,
+        topicId,
+        profileId: typeof payload.profileId === "string"
+          ? payload.profileId
+          : run?.profileId,
+        accountId: typeof payload.accountId === "string"
+          ? payload.accountId
+          : run?.accountId,
+        action,
+        title: typeof payload.title === "string" ? payload.title : undefined,
+        reason: typeof payload.reason === "string" ? payload.reason : undefined,
+      });
+      return Response.json({ feedback });
+    }
+    if (request.method === "DELETE" && topicId) {
+      const deleted = await stores.editorialMemoryStore.deleteTopicFeedback(
+        runId,
+        topicId,
+      );
       return Response.json({ deleted });
     }
   }
@@ -699,6 +815,14 @@ function normalizeFeedbackRating(
   return value === "good" || value === "ok" || value === "bad" ? value : null;
 }
 
+function normalizeTopicFeedbackAction(
+  value: string | undefined,
+): "lead" | "adopt" | "skip" | null {
+  return value === "lead" || value === "adopt" || value === "skip"
+    ? value
+    : null;
+}
+
 async function handleArtifactRequest(
   request: Request,
   env: CloudflareEnv,
@@ -789,7 +913,13 @@ export default {
       return await handleConfigSummaryRequest(request, env);
     }
     if (
+      request.method === "GET" && url.pathname === "/api/accounts/insights"
+    ) {
+      return await handleAccountInsightsRequest(request, env);
+    }
+    if (
       url.pathname === "/api/config/providers" ||
+      url.pathname.startsWith("/api/config/weixin/accounts") ||
       url.pathname.startsWith("/api/config/capabilities") ||
       url.pathname.startsWith("/api/config/features/article/profiles")
     ) {

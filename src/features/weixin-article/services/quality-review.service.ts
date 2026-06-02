@@ -4,6 +4,7 @@ import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 import type { ArticlePlan } from "@src/features/weixin-article/domain/article-plan.ts";
 import type { EditorialTopicReport } from "@src/features/weixin-article/domain/editorial-topic.ts";
 import type { EvidencePack } from "@src/features/weixin-article/domain/evidence.ts";
+import { ARTICLE_LLM_TIMEOUT_MS } from "@src/features/weixin-article/services/article-llm-budget.ts";
 import {
   ArticleQualityReview,
   QualityDimensionScores,
@@ -75,6 +76,8 @@ export class WeixinArticleQualityReviewService {
         chatOptions: {
           temperature: 0.2,
           max_tokens: 3200,
+          timeoutMs: ARTICLE_LLM_TIMEOUT_MS.qualityReview,
+          maxAttempts: 2,
           response_format: { type: "json_object" },
         },
         maxAttempts: 2,
@@ -94,12 +97,12 @@ export function normalizeQualityReview(
   error?: string,
 ): ArticleQualityReview {
   const dimensionScores = normalizeDimensionScores(raw.dimensionScores);
-  const issues = normalizeIssues(raw.issues);
+  let issues = normalizeIssues(raw.issues);
   const overallScore = clampScore(
     raw.overallScore,
     averageDimensionScore(dimensionScores),
   );
-  const recommendedAction = normalizeAction(
+  let recommendedAction = normalizeAction(
     raw.recommendedAction,
     overallScore,
     issues,
@@ -107,6 +110,23 @@ export function normalizeQualityReview(
   const allowPublish = typeof raw.allowPublish === "boolean"
     ? raw.allowPublish
     : recommendedAction === "publish";
+  if (
+    !issues.length &&
+    (recommendedAction === "revise" || recommendedAction === "block" ||
+      !allowPublish || overallScore < 80)
+  ) {
+    issues = synthesizeQualityIssues(
+      raw,
+      dimensionScores,
+      overallScore,
+      recommendedAction,
+    );
+    recommendedAction = normalizeAction(
+      recommendedAction,
+      overallScore,
+      issues,
+    );
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -120,6 +140,48 @@ export function normalizeQualityReview(
     issues,
     repairSuggestions: stringArray(raw.repairSuggestions).slice(0, 8),
   };
+}
+
+function synthesizeQualityIssues(
+  raw: RawQualityReview,
+  scores: QualityDimensionScores,
+  overallScore: number,
+  action: QualityReviewAction,
+): QualityIssue[] {
+  const category = weakestDimensionCategory(scores);
+  const severity: QualityIssueSeverity = action === "block" || overallScore < 50
+    ? "blocker"
+    : overallScore < 70
+    ? "high"
+    : "medium";
+  const summary = stringValue(raw.summary);
+  const suggestion = stringArray(raw.repairSuggestions)[0] ??
+    "根据审稿摘要收敛正文中未被来源支持或不够清晰的表述。";
+  return [{
+    id: "issue-synthesized-1",
+    category,
+    severity,
+    message: summary ??
+      `审稿要求继续修订，最低维度为 ${category}，但模型未返回结构化问题。`,
+    suggestion,
+    autoFixable: severity !== "blocker",
+  }];
+}
+
+function weakestDimensionCategory(
+  scores: QualityDimensionScores,
+): QualityIssueCategory {
+  const entries: Array<[QualityIssueCategory, number]> = [
+    ["fact", scores.factConsistency],
+    ["title", scores.titleQuality],
+    ["structure", scores.structureQuality],
+    ["tone", scores.expressionQuality],
+    ["html", scores.htmlCompliance],
+    ["image", scores.imageRelevance],
+    ["risk", scores.riskHandling],
+  ];
+  entries.sort((a, b) => a[1] - b[1]);
+  return entries[0]?.[0] ?? "structure";
 }
 
 function createFallbackQualityReview(

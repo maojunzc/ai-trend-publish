@@ -6,6 +6,7 @@ import {
   getHealth,
   getRunDetail,
   getRuns,
+  getWeixinAccountInsights,
   getWeixinAccounts,
   triggerMatrixRun,
   triggerRun,
@@ -24,6 +25,7 @@ export function dashboardQueryKeys(apiKey: string) {
     capabilities: ["dashboard", apiKey, "capabilities"] as const,
     profiles: ["dashboard", apiKey, "article-profiles"] as const,
     accounts: ["dashboard", apiKey, "weixin-accounts"] as const,
+    accountInsights: ["dashboard", apiKey, "weixin-account-insights"] as const,
     runs: ["dashboard", apiKey, "runs"] as const,
     runDetail: (runId: string | null) =>
       ["dashboard", apiKey, "run-detail", runId] as const,
@@ -73,6 +75,13 @@ export function useDashboardQueries(
     staleTime: 30_000,
   });
 
+  const accountInsights = useQuery({
+    queryKey: keys.accountInsights,
+    queryFn: () => getWeixinAccountInsights(apiKey),
+    enabled,
+    refetchInterval: autoRefresh ? AUTO_REFRESH_MS : false,
+  });
+
   const runs = useQuery({
     queryKey: keys.runs,
     queryFn: () => getRuns(apiKey),
@@ -93,6 +102,7 @@ export function useDashboardQueries(
     capabilities,
     articleProfiles,
     accounts,
+    accountInsights,
     runs,
     selectedRun,
   };
@@ -109,6 +119,7 @@ export function useDashboardRefresh(apiKey: string) {
       queryClient.invalidateQueries({ queryKey: keys.capabilities }),
       queryClient.invalidateQueries({ queryKey: keys.profiles }),
       queryClient.invalidateQueries({ queryKey: keys.accounts }),
+      queryClient.invalidateQueries({ queryKey: keys.accountInsights }),
       queryClient.invalidateQueries({ queryKey: keys.runs }),
     ]);
 }
@@ -122,6 +133,7 @@ export function useTriggerMatrixRun(apiKey: string) {
       triggerMatrixRun(apiKey, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: keys.runs });
+      await queryClient.invalidateQueries({ queryKey: keys.accountInsights });
     },
   });
 }
@@ -134,6 +146,7 @@ export function useTriggerRun(apiKey: string) {
     mutationFn: (payload: TriggerRunPayload) => triggerRun(apiKey, payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: keys.runs });
+      await queryClient.invalidateQueries({ queryKey: keys.accountInsights });
     },
   });
 }

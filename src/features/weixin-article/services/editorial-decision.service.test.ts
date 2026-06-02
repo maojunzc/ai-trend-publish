@@ -68,6 +68,30 @@ function createService(content: string): WeixinArticleEditorialDecisionService {
   return new WeixinArticleEditorialDecisionService(llm);
 }
 
+function createServiceWithPromptCapture(
+  content: string,
+  prompts: string[],
+): WeixinArticleEditorialDecisionService {
+  const llm: LLMProvider = {
+    initialize: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    setModel: () => {},
+    createChatCompletion: (messages) => {
+      prompts.push(...messages.map((message) => String(message.content)));
+      return Promise.resolve({
+        choices: [{ message: { content } }],
+      });
+    },
+  };
+  return new WeixinArticleEditorialDecisionService(llm, undefined, {
+    displayName: "AI 产品观察",
+    positioning: "面向产品经理解释 AI 产品变化",
+    audience: "AI 产品经理",
+    tone: "克制、有判断",
+    titleStyle: "少用速递，多用具体变化",
+  });
+}
+
 Deno.test("editorial decision service returns normalized AI decision", async () => {
   const service = createService(JSON.stringify({
     leadTopicId: "topic-openai",
@@ -111,6 +135,28 @@ Deno.test("editorial decision service falls back when LLM output is invalid", as
   assertEquals(decision.fallback, true);
   assertEquals(decision.leadTopicId, "topic-openai");
   assertEquals(decision.selectedTopics[0].role, "lead");
+});
+
+Deno.test("editorial decision service passes account brand guide to prompt", async () => {
+  const prompts: string[] = [];
+  const service = createServiceWithPromptCapture(
+    JSON.stringify({
+      leadTopicId: "topic-openai",
+      recommendedFormat: "mixed",
+    }),
+    prompts,
+  );
+
+  await service.createEditorialDecision(topicReport, contents);
+
+  assertEquals(
+    prompts.some((prompt) => prompt.includes("AI 产品观察")),
+    true,
+  );
+  assertEquals(
+    prompts.some((prompt) => prompt.includes("面向产品经理解释 AI 产品变化")),
+    true,
+  );
 });
 
 Deno.test("normalizeEditorialDecision filters invalid topic and source ids", () => {

@@ -93,7 +93,9 @@ ${newsroomStyle}
 5. bodyImagePlan 只规划真正有助于理解的图片，不要为了装饰配图。
 6. riskNotes 必须指出不确定信息、单一来源、商业宣传、伦理争议或需要谨慎表述的点。
 7. summary 必须说明读者为什么要看这篇：新鲜点、影响对象、后续变量三者至少出现两个。
-8. 如果素材质量不足，要在 summary 和 riskNotes 里说明，不要硬凑深度。`;
+8. 如果素材质量不足，要在 summary 和 riskNotes 里说明，不要硬凑深度。
+9. 商业状态、定价、付费/免费、API 是否开放、deprecated/legacy、替代关系、发布时间、参数规格，只有来源摘录或补充证据明确写出时才能放进 thesis、section title 或 keyPoints；否则必须写成“待确认/尚未披露”。
+10. section 的标题和 keyPoints 必须能被该 section.articleIds 对应的文章摘录支撑；如果只是 topic/搜索词里出现、但正文摘录没出现，不要把它作为章节主轴。`;
 }
 
 export function getArticlePlanUserPrompt(
@@ -158,7 +160,12 @@ ${JSON.stringify(compactDecision(decision), null, 2)}
 ${JSON.stringify(compactArticles, null, 2)}
 
 补充证据包：
-${JSON.stringify(compactEvidencePack(evidencePack), null, 2)}`;
+${JSON.stringify(compactEvidencePack(evidencePack), null, 2)}
+
+生成前请做一次事实边界自检：
+- 不要把搜索 query、topic title、编辑决策里的推测当成事实。
+- 每个 section.title 和 keyPoints 必须能从对应 articleIds 的 excerpt 或补充证据 summary 中找到直接依据。
+- 如果只看到列表页标题、没有完整正文，就把它写成“看到官方列表页出现该条目”，不要补出 API、计费、替代、参数等细节。`;
 }
 
 export function isArticlePlanFormat(value: string): value is ArticlePlanFormat {

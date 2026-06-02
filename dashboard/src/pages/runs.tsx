@@ -7,6 +7,7 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
+  RotateCcw,
   Save,
   Search,
   XCircle,
@@ -217,17 +218,27 @@ function RunList(
 function RunDetail(
   {
     run,
+    allRuns,
     apiKey,
     profileId,
+    onSelectRun,
+    onRerunAccount,
     onPreviewArtifact,
   }: {
     run: ArticleRunDetail | null;
+    allRuns: ArticleRunRecord[];
     apiKey: string;
     profileId: string;
+    onSelectRun: (runId: string) => void;
+    onRerunAccount?: (run: ArticleRunRecord) => Promise<void>;
     onPreviewArtifact: (artifact: ArtifactRef) => void;
   },
 ) {
   const artifacts = useMemo(() => collectArtifacts(run), [run]);
+  const relatedMatrixRuns = useMemo(
+    () => collectRelatedMatrixRuns(run, allRuns),
+    [run, allRuns],
+  );
 
   if (!run) {
     return (
@@ -285,6 +296,13 @@ function RunDetail(
       </Card>
 
       <RunFeedbackPanel run={run} apiKey={apiKey} profileId={profileId} />
+
+      <MatrixRunPanel
+        run={run}
+        relatedRuns={relatedMatrixRuns}
+        onSelectRun={onSelectRun}
+        onRerunAccount={onRerunAccount}
+      />
 
       <Card>
         <div className="mb-3 flex items-center justify-between">
@@ -436,7 +454,8 @@ function RunFeedbackPanel(
           body: JSON.stringify({
             rating,
             note,
-            profileId,
+            profileId: run.profileId ?? profileId,
+            accountId: run.accountId,
           }),
         },
       );
@@ -487,6 +506,7 @@ function RunFeedbackPanel(
               : "muted"}
           >
             已反馈 · {feedbackLabel(feedback.rating)}
+            {feedback.accountId ? ` · ${feedback.accountId}` : ""}
           </Badge>
         )}
       </div>
@@ -561,16 +581,257 @@ function collectArtifacts(run: ArticleRunDetail | null): ArtifactRef[] {
   return [...byKey.values()];
 }
 
+function collectRelatedMatrixRuns(
+  run: ArticleRunDetail | null,
+  allRuns: ArticleRunRecord[],
+): ArticleRunRecord[] {
+  if (!run) return [];
+  if (run.runKind === "matrix-parent") {
+    return allRuns
+      .filter((item) => item.parentRunId === run.runId)
+      .sort(sortRunAsc);
+  }
+  if (run.parentRunId) {
+    return allRuns
+      .filter((item) => item.parentRunId === run.parentRunId)
+      .sort(sortRunAsc);
+  }
+  return [];
+}
+
+function sortRunAsc(a: ArticleRunRecord, b: ArticleRunRecord): number {
+  return Date.parse(a.createdAt) - Date.parse(b.createdAt);
+}
+
+function MatrixRunPanel(
+  { run, relatedRuns, onSelectRun, onRerunAccount }: {
+    run: ArticleRunDetail;
+    relatedRuns: ArticleRunRecord[];
+    onSelectRun: (runId: string) => void;
+    onRerunAccount?: (run: ArticleRunRecord) => Promise<void>;
+  },
+) {
+  const [rerunningRunId, setRerunningRunId] = useState("");
+  if (relatedRuns.length === 0) return null;
+  const succeeded = relatedRuns.filter((item) => item.status === "succeeded")
+    .length;
+  const failed = relatedRuns.filter((item) => item.status === "failed").length;
+  const running =
+    relatedRuns.filter((item) =>
+      item.status === "running" || item.status === "queued"
+    ).length;
+  const cancelled = relatedRuns.filter((item) => item.status === "cancelled")
+    .length;
+  const completed = succeeded + failed + cancelled;
+  const completion = Math.round((completed / relatedRuns.length) * 100);
+  const title = run.runKind === "matrix-parent" ? "矩阵结果" : "同批账号";
+
+  return (
+    <Card>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="tp-title text-base font-semibold">{title}</h3>
+          <p className="tp-muted mt-1 text-xs leading-5">
+            对比同一批素材在不同公众号账号下的成稿状态，用于判断账号定位是否真的拉开差异。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Badge tone="info">完成 {completion}%</Badge>
+          <Badge tone="success">成功 {succeeded}</Badge>
+          <Badge tone={failed > 0 ? "danger" : "muted"}>失败 {failed}</Badge>
+          <Badge tone={running > 0 ? "info" : "muted"}>进行中 {running}</Badge>
+        </div>
+      </div>
+      <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-[#e2e8f0]">
+        <div
+          className={cx(
+            "h-full rounded-full transition-all",
+            failed > 0 ? "bg-[#dc2626]" : "bg-[#16a34a]",
+          )}
+          style={{ width: `${completion}%` }}
+        />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[920px] text-left text-sm">
+          <thead className="tp-muted border-b border-[#e2e8f0] text-xs">
+            <tr>
+              <th className="py-2 pr-4 font-medium">账号</th>
+              <th className="py-2 pr-4 font-medium">状态</th>
+              <th className="py-2 pr-4 font-medium">主线/形态</th>
+              <th className="py-2 pr-4 font-medium">质量</th>
+              <th className="py-2 pr-4 font-medium">发布</th>
+              <th className="py-2 pr-4 font-medium">问题</th>
+              <th className="py-2 pr-4 font-medium">产物</th>
+              <th className="py-2 pr-4 font-medium">完成</th>
+              <th className="py-2 pr-0 text-right font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {relatedRuns.map((item) => {
+              const summary = parseRunSummary(item.summary);
+              const errorHint = explainError(item.error);
+              const qualityTone = qualityScoreTone(summary.qualityScore);
+              return (
+                <tr
+                  key={item.runId}
+                  className="border-b border-[#eee5d4] hover:bg-[#f8fafc]"
+                  onClick={() => onSelectRun(item.runId)}
+                >
+                  <td className="py-2.5 pr-4">
+                    <div className="tp-title font-medium">
+                      {item.accountId ?? "default"}
+                    </div>
+                    <div className="tp-muted max-w-[260px] truncate text-xs">
+                      {item.runId}
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <Badge tone={statusTone(item.status)}>
+                      {statusIcon(item.status)}
+                      {item.status}
+                    </Badge>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    <div className="max-w-[300px]">
+                      <div className="truncate text-sm text-[var(--tp-ink)]">
+                        {summary.editorialDecision ?? summary.topic ?? "-"}
+                      </div>
+                      {summary.articlePlan && (
+                        <div className="tp-muted mt-1 truncate text-xs">
+                          {summary.articlePlan}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="tp-muted py-2.5 pr-4">
+                    {summary.qualityScore !== undefined
+                      ? (
+                        <Badge tone={qualityTone}>
+                          {summary.qualityScore} 分
+                        </Badge>
+                      )
+                      : summary.quality ?? "-"}
+                  </td>
+                  <td className="tp-muted py-2.5 pr-4">
+                    {summary.publish ?? (item.dryRun ? "dry-run" : "-")}
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    {item.error
+                      ? (
+                        <div className="max-w-[260px]">
+                          <div className="truncate text-xs text-[#b42318]">
+                            {item.error}
+                          </div>
+                          {errorHint && (
+                            <div className="mt-1 line-clamp-2 text-xs text-[#7b3f2f]">
+                              {errorHint}
+                            </div>
+                          )}
+                        </div>
+                      )
+                      : <span className="tp-muted text-xs">-</span>}
+                  </td>
+                  <td className="tp-muted py-2.5 pr-4">
+                    {item.artifacts?.length ?? 0}
+                  </td>
+                  <td className="tp-muted py-2.5 pr-4">
+                    {formatDate(item.finishedAt ?? item.updatedAt)}
+                  </td>
+                  <td className="py-2.5 pr-0">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSelectRun(item.runId);
+                        }}
+                      >
+                        查看
+                      </Button>
+                      {onRerunAccount && item.accountId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={rerunningRunId === item.runId}
+                          onClick={async (event) => {
+                            event.stopPropagation();
+                            setRerunningRunId(item.runId);
+                            try {
+                              await onRerunAccount(item);
+                            } finally {
+                              setRerunningRunId("");
+                            }
+                          }}
+                        >
+                          <RotateCcw
+                            className={cx(
+                              "size-3.5",
+                              rerunningRunId === item.runId && "animate-spin",
+                            )}
+                          />
+                          复跑
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function parseRunSummary(summary?: string): {
+  quality?: string;
+  qualityScore?: number;
+  publish?: string;
+  topic?: string;
+  editorialDecision?: string;
+  articlePlan?: string;
+} {
+  if (!summary) return {};
+  const quality = summary.match(/质量审稿:\s*([^\n]+)/)?.[1]?.trim();
+  const qualityScore = quality?.match(/(\d+(?:\.\d+)?)\s*分/)?.[1];
+  const publish = summary.match(/发布:\s*([^\n]+)/)?.[1]?.trim();
+  const topic = summary.match(/选题:\s*([^\n]+)/)?.[1]?.trim();
+  const editorialDecision = summary.match(/编辑决策:\s*([^\n]+)/)?.[1]
+    ?.trim();
+  const articlePlan = summary.match(/文章计划:\s*([^\n]+)/)?.[1]?.trim();
+  return {
+    quality,
+    qualityScore: qualityScore ? Number(qualityScore) : undefined,
+    publish,
+    topic,
+    editorialDecision,
+    articlePlan,
+  };
+}
+
+function qualityScoreTone(
+  score: number | undefined,
+): "success" | "danger" | "info" | "muted" {
+  if (score === undefined) return "muted";
+  if (score >= 85) return "success";
+  if (score < 70) return "danger";
+  return "info";
+}
+
 export function RunsWorkspace(
   {
     runs,
     selectedRunId,
     selectedRun,
+    allRuns,
     filter,
     setFilter,
     query,
     setQuery,
     onSelectRun,
+    onRerunAccount,
     apiKey,
     profileId,
     onPreviewArtifact,
@@ -578,11 +839,13 @@ export function RunsWorkspace(
     runs: ArticleRunRecord[];
     selectedRunId: string | null;
     selectedRun: ArticleRunDetail | null;
+    allRuns?: ArticleRunRecord[];
     filter: "all" | RunStatus;
     setFilter: (filter: "all" | RunStatus) => void;
     query: string;
     setQuery: (query: string) => void;
     onSelectRun: (runId: string) => void;
+    onRerunAccount?: (run: ArticleRunRecord) => Promise<void>;
     apiKey: string;
     profileId: string;
     onPreviewArtifact: (artifact: ArtifactRef) => void;
@@ -601,8 +864,11 @@ export function RunsWorkspace(
       />
       <RunDetail
         run={selectedRun}
+        allRuns={allRuns ?? runs}
         apiKey={apiKey}
         profileId={profileId}
+        onSelectRun={onSelectRun}
+        onRerunAccount={onRerunAccount}
         onPreviewArtifact={onPreviewArtifact}
       />
     </div>

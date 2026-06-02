@@ -8,6 +8,7 @@ import {
 import type { ArticlePlan } from "@src/features/weixin-article/domain/article-plan.ts";
 import type { ArticleQualityReview } from "@src/features/weixin-article/domain/quality-review.ts";
 import { postProcessDynamicHtml } from "@src/features/weixin-article/rendering/dynamic/html-post-processor.ts";
+import { ARTICLE_LLM_TIMEOUT_MS } from "@src/features/weixin-article/services/article-llm-budget.ts";
 import {
   getArticleRevisionSystemPrompt,
   getArticleRevisionUserPrompt,
@@ -43,9 +44,7 @@ export class WeixinArticleRevisionService {
     contents: ScrapedContent[];
   }): Promise<ArticleRevisionResult> {
     const autoFixableIssues = input.qualityReview.issues.filter((issue) =>
-      issue.autoFixable &&
-      issue.severity !== "blocker" &&
-      !(issue.category === "fact" && issue.severity === "high")
+      isSafeRevisionCandidate(issue)
     );
     if (!autoFixableIssues.length) {
       return createNoopRevision(input, false, "没有可安全自动修复的问题");
@@ -72,6 +71,8 @@ export class WeixinArticleRevisionService {
         chatOptions: {
           temperature: 0.25,
           max_tokens: 5200,
+          timeoutMs: ARTICLE_LLM_TIMEOUT_MS.revision,
+          maxAttempts: 2,
           response_format: { type: "json_object" },
         },
         maxAttempts: 2,
@@ -83,6 +84,17 @@ export class WeixinArticleRevisionService {
       return createNoopRevision(input, true, message);
     }
   }
+}
+
+function isSafeRevisionCandidate(
+  issue: ArticleQualityReview["issues"][number],
+): boolean {
+  if (issue.severity === "blocker") return false;
+  if (issue.autoFixable) return true;
+  return issue.category === "title" ||
+    issue.category === "tone" ||
+    issue.category === "structure" ||
+    issue.category === "html";
 }
 
 export function normalizeArticleRevision(

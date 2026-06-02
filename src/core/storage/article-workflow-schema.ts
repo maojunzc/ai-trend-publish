@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS article_vectors (
 CREATE TABLE IF NOT EXISTS editorial_article_memory (
   run_id TEXT PRIMARY KEY,
   profile_id TEXT,
+  account_id TEXT,
   title TEXT NOT NULL,
   thesis TEXT,
   keywords_json TEXT NOT NULL DEFAULT '[]',
@@ -64,6 +65,8 @@ CREATE TABLE IF NOT EXISTS editorial_article_memory (
 );
 CREATE INDEX IF NOT EXISTS idx_editorial_article_memory_profile_created
   ON editorial_article_memory(profile_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_editorial_article_memory_account_created
+  ON editorial_article_memory(account_id, created_at DESC);
 CREATE TABLE IF NOT EXISTS editorial_source_performance (
   url TEXT PRIMARY KEY,
   group_name TEXT NOT NULL,
@@ -83,6 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_editorial_source_performance_updated
 CREATE TABLE IF NOT EXISTS editorial_run_feedback (
   run_id TEXT PRIMARY KEY,
   profile_id TEXT,
+  account_id TEXT,
   rating TEXT NOT NULL,
   note TEXT,
   created_at TEXT NOT NULL,
@@ -90,4 +94,22 @@ CREATE TABLE IF NOT EXISTS editorial_run_feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_editorial_run_feedback_profile_updated
   ON editorial_run_feedback(profile_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_editorial_run_feedback_account_updated
+  ON editorial_run_feedback(account_id, updated_at DESC);
+CREATE TABLE IF NOT EXISTS editorial_topic_feedback (
+  run_id TEXT NOT NULL,
+  topic_id TEXT NOT NULL,
+  profile_id TEXT,
+  account_id TEXT,
+  action TEXT NOT NULL,
+  title TEXT,
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, topic_id)
+);
+CREATE INDEX IF NOT EXISTS idx_editorial_topic_feedback_account_updated
+  ON editorial_topic_feedback(account_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_editorial_topic_feedback_profile_updated
+  ON editorial_topic_feedback(profile_id, updated_at DESC);
 `;

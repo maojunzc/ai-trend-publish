@@ -30,13 +30,25 @@ interface RelayResponse<T> {
   error?: string;
 }
 
+export interface WeixinRelayHttpClient {
+  request<T>(
+    url: string,
+    options?: RequestInit & {
+      timeout?: number;
+      retries?: number;
+      retryDelay?: number;
+    },
+  ): Promise<T>;
+}
+
 export class WeixinRelayPublisher
   implements ContentPublisher, ContentImageUploader {
   constructor(
     private readonly relayConfig: WeixinRelayConfig,
     private readonly weixinConfig: WeixinProviderConfig,
     private readonly accountId?: string,
-    private readonly httpClient = HttpClient.getInstance(),
+    private readonly httpClient: WeixinRelayHttpClient = HttpClient
+      .getInstance(),
   ) {}
 
   async validateIpWhitelist(): Promise<string | boolean> {

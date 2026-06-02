@@ -2,11 +2,16 @@ import { triggerWorkflow } from "./controllers/workflow.controller.ts";
 import { getAppConfig } from "@src/utils/config/app-config.ts";
 import { renderDashboardHtml } from "@src/app/weixin-article/dashboard.html.ts";
 import { createDashboardConfigSummary } from "@src/app/weixin-article/dashboard-summary.ts";
+import { buildWeixinAccountInsights } from "@src/app/weixin-article/account-insights.ts";
 import { createLocalArticleRuntimeStores } from "@src/app/weixin-article/local-runtime-stores.ts";
+import { runLocalWeixinArticleMatrixDryRun } from "@src/app/weixin-article/local-matrix-runner.ts";
 import { LocalWorkflowRuntime } from "@src/core/workflow/local-workflow-runtime.ts";
 import { createLocalWeixinArticleWorkflowDefinition } from "@src/app/weixin-article/local-workflow.definition.ts";
 import { handleRuntimeConfigApi } from "@src/app/weixin-article/runtime/runtime-config-api.ts";
-import { resolveArticleRuntimeConfig } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
+import {
+  resolveArticleRuntimeConfig,
+  seedArticleRuntimeConfig,
+} from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
 import type {
   WeixinArticleWorkflowInput,
 } from "@src/app/weixin-article/workflow.definition.ts";
@@ -192,6 +197,23 @@ async function handleConfigSummaryRequest(req: Request): Promise<Response> {
   );
 }
 
+async function handleAccountInsightsRequest(req: Request): Promise<Response> {
+  const unauthorized = await verifyRequestAuth(req);
+  if (unauthorized) return unauthorized;
+
+  const config = await getAppConfig();
+  const stores = createLocalArticleRuntimeStores(config);
+  await seedArticleRuntimeConfig(stores.runtimeConfigStore, config);
+  const accounts = await stores.runtimeConfigStore.listWeixinAccountProfiles();
+  const runs = await stores.runStateStore.listRuns(500);
+  const insights = await buildWeixinAccountInsights({
+    accounts,
+    runs,
+    editorialMemoryStore: stores.editorialMemoryStore,
+  });
+  return jsonResponse({ insights });
+}
+
 async function handleRunsRequest(req: Request, pathname: string) {
   const unauthorized = await verifyRequestAuth(req);
   if (unauthorized) return unauthorized;
@@ -216,44 +238,19 @@ async function handleRunsRequest(req: Request, pathname: string) {
     if (accountIds.length === 0) {
       return jsonResponse({ error: "请选择至少一个公众号账号" }, 400);
     }
-    const matrixRunId = `matrix-${crypto.randomUUID()}`;
-    await stores.runStateStore.startRun({
-      runId: matrixRunId,
-      runKind: "matrix-parent",
-      mode: "local",
-      dryRun: true,
-      trigger: "manual",
+    const result = await runLocalWeixinArticleMatrixDryRun(config, stores, {
+      accountIds,
       profileId: payload.profileId,
+      sourceType: payload.sourceType,
+      maxArticles: payload.maxArticles,
     });
-    const runtime = new LocalWorkflowRuntime();
-    const childRunIds: string[] = [];
-    for (const accountId of accountIds) {
-      const runId = `${matrixRunId}-${accountId}`;
-      childRunIds.push(runId);
-      await runtime.run(createLocalWeixinArticleWorkflowDefinition(), {
-        payload: {
-          ...payload,
-          dryRun: true,
-          accountId,
-          runId,
-          runKind: "matrix-child",
-          parentRunId: matrixRunId,
-          trigger: "manual",
-        },
-        id: runId,
-        timestamp: Date.now(),
-      });
-      await stores.runStateStore.updateRun(runId, {
-        runKind: "matrix-child",
-        parentRunId: matrixRunId,
-        accountId,
-        profileId: payload.profileId,
-      });
-    }
-    await stores.runStateStore.finishRun(matrixRunId, {
-      summary: `矩阵 dry-run 完成：${childRunIds.length} 个账号`,
+    return jsonResponse({
+      success: true,
+      matrixRunId: result.matrixRunId,
+      childRunIds: result.childRunIds,
+      status: result.status,
+      summary: result.summary,
     });
-    return jsonResponse({ success: true, matrixRunId, childRunIds });
   }
 
   if (req.method === "POST" && pathname === "/api/runs") {
@@ -277,19 +274,8 @@ async function handleRunsRequest(req: Request, pathname: string) {
   }
 
   if (req.method === "GET" && pathname === "/api/runs") {
-    const runs = await stores.runStateStore.listRuns(50);
+    const runs = await stores.runStateStore.listRuns(100);
     return jsonResponse({ runs });
-  }
-
-  const runMatch = pathname.match(/^\/api\/runs\/([^/]+)$/);
-  if (req.method === "GET" && runMatch) {
-    const run = await stores.runStateStore.getRun(
-      decodeURIComponent(runMatch[1]),
-    );
-    if (!run) {
-      return jsonResponse({ error: "run 不存在" }, 404);
-    }
-    return jsonResponse({ run });
   }
 
   const feedbackMatch = pathname.match(/^\/api\/runs\/([^/]+)\/feedback$/);
@@ -304,16 +290,21 @@ async function handleRunsRequest(req: Request, pathname: string) {
         rating?: string;
         note?: string;
         profileId?: string;
+        accountId?: string;
       };
       const rating = normalizeFeedbackRating(payload.rating);
       if (!rating) {
         return jsonResponse({ error: "rating 必须是 good / ok / bad" }, 400);
       }
+      const run = await stores.runStateStore.getRun(runId);
       const feedback = await stores.editorialMemoryStore.saveFeedback({
         runId,
         profileId: typeof payload.profileId === "string"
           ? payload.profileId
-          : undefined,
+          : run?.profileId,
+        accountId: typeof payload.accountId === "string"
+          ? payload.accountId
+          : run?.accountId,
         rating,
         note: typeof payload.note === "string" ? payload.note : undefined,
       });
@@ -325,6 +316,71 @@ async function handleRunsRequest(req: Request, pathname: string) {
     }
   }
 
+  const topicFeedbackMatch = pathname.match(
+    /^\/api\/runs\/([^/]+)\/topic-feedback(?:\/([^/]+))?$/,
+  );
+  if (topicFeedbackMatch) {
+    const runId = decodeURIComponent(topicFeedbackMatch[1]);
+    const topicId = topicFeedbackMatch[2]
+      ? decodeURIComponent(topicFeedbackMatch[2])
+      : undefined;
+    if (req.method === "GET") {
+      const feedback = await stores.editorialMemoryStore.listTopicFeedback({
+        runId,
+      });
+      return jsonResponse({ feedback });
+    }
+    if (req.method === "PUT" && topicId) {
+      const payload = await req.json().catch(() => ({})) as {
+        action?: string;
+        title?: string;
+        reason?: string;
+        profileId?: string;
+        accountId?: string;
+      };
+      const action = normalizeTopicFeedbackAction(payload.action);
+      if (!action) {
+        return jsonResponse(
+          { error: "action 必须是 lead / adopt / skip" },
+          400,
+        );
+      }
+      const run = await stores.runStateStore.getRun(runId);
+      const feedback = await stores.editorialMemoryStore.saveTopicFeedback({
+        runId,
+        topicId,
+        profileId: typeof payload.profileId === "string"
+          ? payload.profileId
+          : run?.profileId,
+        accountId: typeof payload.accountId === "string"
+          ? payload.accountId
+          : run?.accountId,
+        action,
+        title: typeof payload.title === "string" ? payload.title : undefined,
+        reason: typeof payload.reason === "string" ? payload.reason : undefined,
+      });
+      return jsonResponse({ feedback });
+    }
+    if (req.method === "DELETE" && topicId) {
+      const deleted = await stores.editorialMemoryStore.deleteTopicFeedback(
+        runId,
+        topicId,
+      );
+      return jsonResponse({ deleted });
+    }
+  }
+
+  const runMatch = pathname.match(/^\/api\/runs\/([^/]+)$/);
+  if (req.method === "GET" && runMatch) {
+    const run = await stores.runStateStore.getRun(
+      decodeURIComponent(runMatch[1]),
+    );
+    if (!run) {
+      return jsonResponse({ error: "run 不存在" }, 404);
+    }
+    return jsonResponse({ run });
+  }
+
   return jsonResponse({ error: "无效的 runs API" }, 404);
 }
 
@@ -332,6 +388,14 @@ function normalizeFeedbackRating(
   value: string | undefined,
 ): "good" | "ok" | "bad" | null {
   return value === "good" || value === "ok" || value === "bad" ? value : null;
+}
+
+function normalizeTopicFeedbackAction(
+  value: string | undefined,
+): "lead" | "adopt" | "skip" | null {
+  return value === "lead" || value === "adopt" || value === "skip"
+    ? value
+    : null;
 }
 
 async function handleArtifactRequest(req: Request): Promise<Response> {
@@ -452,8 +516,12 @@ const handler = async (req: Request): Promise<Response> => {
     if (req.method === "GET" && url.pathname === "/api/config/summary") {
       return await handleConfigSummaryRequest(req);
     }
+    if (req.method === "GET" && url.pathname === "/api/accounts/insights") {
+      return await handleAccountInsightsRequest(req);
+    }
     if (
       url.pathname === "/api/config/providers" ||
+      url.pathname.startsWith("/api/config/weixin/accounts") ||
       url.pathname.startsWith("/api/config/capabilities") ||
       url.pathname.startsWith("/api/config/features/article/profiles")
     ) {

@@ -278,6 +278,7 @@ function configFixture(): Pick<
           enabled: true,
           minScore: 80,
           blockOnHighFactIssue: true,
+          forcePublish: false,
           allowForcePublish: true,
           maxRevisionRounds: 1,
         },

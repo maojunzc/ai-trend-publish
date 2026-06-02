@@ -6,17 +6,22 @@ import {
   PromptProfileName,
   resolvePromptProfile,
 } from "@src/prompts/prompt-profile.ts";
+import { formatAccountBrandGuide } from "@src/prompts/account-brand.ts";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 export function getEditorialDecisionSystemPrompt(
   promptProfile?: PromptProfileName,
+  accountBrand?: JsonObject,
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   return `你是中文内容产品的主编，负责在写作前做“编辑决策”。你的任务不是写正文，而是解释今天为什么写这个主题、跳过哪些主题、如何避免重复和低质量表达。
 
 内容定位：${profile.label}
 目标读者：${profile.audience}
 编辑语气：${profile.editorialTone}
+${brandGuide}
 
 ${newsroomStyle}
 
@@ -58,7 +63,9 @@ export function getEditorialDecisionUserPrompt(
   topics: EditorialTopicReport,
   contents: ScrapedContent[],
   memory?: EditorialMemoryContext,
+  accountBrand?: JsonObject,
 ): string {
+  const brandGuide = formatAccountBrandGuide(accountBrand);
   return `请根据今日候选主题、文章材料和编辑记忆，做一次发布前编辑决策。
 
 决策要求：
@@ -70,6 +77,7 @@ export function getEditorialDecisionUserPrompt(
 - recommendedFormat 要和素材形态匹配，不要默认日报。
 - writingDirectives 要可执行，例如“先解释变化，再讲对开发者的影响”，不要写空泛原则。
 - titleWarnings 要吸收人工反馈，比如“避免标题太泛”“不要夸大成行业转折”“不要固定 AI 速递标题”。 
+${brandGuide}
 
 今日主题：
 ${JSON.stringify(compactTopics(topics), null, 2)}
@@ -123,11 +131,13 @@ function compactMemory(memory?: EditorialMemoryContext) {
     return {
       recentArticles: [],
       recentFeedback: [],
+      recentTopicFeedback: [],
       sourcePerformance: [],
     };
   }
   return {
     recentArticles: memory.recentArticles.slice(0, 8).map((item) => ({
+      accountId: item.accountId,
       title: item.title,
       thesis: item.thesis,
       keywords: item.keywords,
@@ -136,8 +146,19 @@ function compactMemory(memory?: EditorialMemoryContext) {
       createdAt: item.createdAt,
     })),
     recentFeedback: memory.recentFeedback.slice(0, 8).map((item) => ({
+      accountId: item.accountId,
       rating: item.rating,
       note: item.note,
+      updatedAt: item.updatedAt,
+    })),
+    recentTopicFeedback: memory.recentTopicFeedback.slice(0, 10).map((
+      item,
+    ) => ({
+      accountId: item.accountId,
+      action: item.action,
+      topicId: item.topicId,
+      title: item.title,
+      reason: item.reason,
       updatedAt: item.updatedAt,
     })),
     sourcePerformance: memory.sourcePerformance.slice(0, 12).map((item) => ({

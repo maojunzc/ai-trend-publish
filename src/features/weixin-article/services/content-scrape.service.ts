@@ -108,6 +108,7 @@ const DEFAULT_SOURCE_LIMITS: ArticleSourceLimits = {
   maxAgeDays: 14,
   maxItemsPerSource: 20,
 };
+const MAX_LINK_CANDIDATES_PER_SOURCE = 12;
 
 export class WeixinArticleContentScrapeService {
   constructor(
@@ -210,13 +211,17 @@ export class WeixinArticleContentScrapeService {
     );
 
     if (result.contents.length > 0) {
-      const limited = applySourceLimits(
+      const expandedContents = appendLinkedArticleCandidates(
         result.contents,
+        source,
+      );
+      const limited = applySourceLimits(
+        expandedContents,
         this.getSourceLimits(),
       );
       if (limited.filteredOldCount > 0 || limited.truncatedCount > 0) {
         logger.info(
-          `[${result.provider}] ${source.url} 截断: 原始 ${result.contents.length} 篇，保留 ${limited.contents.length} 篇，旧内容 ${limited.filteredOldCount} 篇，超量 ${limited.truncatedCount} 篇`,
+          `[${result.provider}] ${source.url} 截断: 原始 ${result.contents.length} 篇，展开 ${expandedContents.length} 篇，保留 ${limited.contents.length} 篇，旧内容 ${limited.filteredOldCount} 篇，超量 ${limited.truncatedCount} 篇`,
         );
       }
 
@@ -339,9 +344,184 @@ function applySourceLimits(
   };
 }
 
+function appendLinkedArticleCandidates(
+  contents: ScrapedContent[],
+  source: ArticleSource,
+): ScrapedContent[] {
+  const seenUrls = new Set(
+    contents.map((content) => normalizeUrl(content.url)),
+  );
+  const candidates: ScrapedContent[] = [];
+
+  for (const content of contents) {
+    if (candidates.length >= MAX_LINK_CANDIDATES_PER_SOURCE) break;
+    const links = extractArticleLinks(content);
+    if (links.length < 3) continue;
+
+    for (const link of links) {
+      if (candidates.length >= MAX_LINK_CANDIDATES_PER_SOURCE) break;
+      const normalizedUrl = normalizeUrl(link.url);
+      if (!normalizedUrl || seenUrls.has(normalizedUrl)) continue;
+      seenUrls.add(normalizedUrl);
+      candidates.push(linkToScrapedContent(link, content, source));
+    }
+  }
+
+  return candidates.length ? [...contents, ...candidates] : contents;
+}
+
+interface ExtractedArticleLink {
+  title: string;
+  url: string;
+  publishDate?: string;
+}
+
+function extractArticleLinks(content: ScrapedContent): ExtractedArticleLink[] {
+  const parentHost = readHost(content.url);
+  if (!parentHost) return [];
+
+  const links: ExtractedArticleLink[] = [];
+  const seen = new Set<string>();
+  const markdownLinkPattern =
+    /(?<!!)\[([^\]\n]{6,180})\]\((https?:\/\/[^)\s]+)\)/g;
+  for (const match of content.content.matchAll(markdownLinkPattern)) {
+    const title = sanitizeLinkTitle(match[1]);
+    const url = normalizeUrl(match[2]);
+    if (!title || !url || seen.has(url)) continue;
+    if (readHost(url) !== parentHost) continue;
+    if (isNoisyLinkTitle(title) || isStaticAssetUrl(url)) continue;
+    seen.add(url);
+    links.push({
+      title,
+      url,
+      publishDate: extractDateFromLinkTitle(title),
+    });
+  }
+
+  return links;
+}
+
+function linkToScrapedContent(
+  link: ExtractedArticleLink,
+  parent: ScrapedContent,
+  source: ArticleSource,
+): ScrapedContent {
+  const publishDate = link.publishDate ?? parent.publishDate;
+  return {
+    id: link.url,
+    title: link.title,
+    url: link.url,
+    publishDate,
+    content: [
+      `来源列表页出现文章链接：${link.title}`,
+      `父级数据源：${parent.title || parent.url}`,
+      "该候选项需要在内容处理阶段深抓详情页；深抓前只能确认链接和标题存在，不能扩展正文细节。",
+    ].join("<next_paragraph />"),
+    media: [],
+    metadata: {
+      source: "linked-article-candidate",
+      parentSourceId: parent.id,
+      parentSourceUrl: parent.url,
+      sourceGroup: source.group,
+      sourceProviders: source.providers,
+      requiresHydration: true,
+      extractedFromListPage: true,
+      score: parent.metadata.score,
+      keywords: extractKeywordsFromLinkTitle(link.title),
+    },
+  };
+}
+
+function sanitizeLinkTitle(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^#+\s*/, "")
+    .trim();
+}
+
+function isNoisyLinkTitle(title: string): boolean {
+  const normalized = title.toLowerCase();
+  if (/^image\s+\d+/i.test(title)) return true;
+  if (normalized.length < 6) return true;
+  return noisyLinkTitlePatterns.some((pattern) => pattern.test(normalized));
+}
+
+const noisyLinkTitlePatterns = [
+  /^skip to /,
+  /^home$/,
+  /^about$/,
+  /^pricing$/,
+  /^contact$/,
+  /^privacy$/,
+  /^terms$/,
+  /^login$/,
+  /^sign in$/,
+  /^try /,
+  /^download /,
+  /^share$/,
+  /^facebook$/,
+  /^linkedin$/,
+  /^x\.com$/,
+  /^twitter$/,
+  /press kit/,
+  /media assets/,
+];
+
+function isStaticAssetUrl(value: string): boolean {
+  try {
+    const pathname = new URL(value).pathname.toLowerCase();
+    return /\.(?:png|jpe?g|webp|gif|svg|ico|css|js|pdf|zip)$/i.test(pathname);
+  } catch {
+    return true;
+  }
+}
+
+function extractDateFromLinkTitle(title: string): string | undefined {
+  const value = title.match(
+    /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},\s+\d{4}\b/i,
+  )?.[0] ?? title.match(/\b\d{4}-\d{1,2}-\d{1,2}\b/)?.[0];
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp).toISOString()
+    : undefined;
+}
+
+function extractKeywordsFromLinkTitle(title: string): string[] {
+  return [
+    ...new Set(
+      title
+        .replace(/[^\p{L}\p{N}.+-]+/gu, " ")
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2)
+        .slice(0, 8),
+    ),
+  ];
+}
+
 function parsePublishTimestamp(value: string): number | undefined {
   const timestamp = Date.parse(value);
   return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function normalizeUrl(value: string | undefined): string {
+  if (!value) return "";
+  try {
+    const url = new URL(value.trim());
+    url.hash = "";
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return value.trim().replace(/\/+$/, "");
+  }
+}
+
+function readHost(value: string): string | undefined {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeLimit(

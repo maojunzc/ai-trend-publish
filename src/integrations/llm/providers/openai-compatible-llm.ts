@@ -1,4 +1,9 @@
-import { HttpClient } from "@src/utils/http/http-client.ts";
+import {
+  HttpClient,
+  HttpError,
+  NetworkError,
+  TimeoutError,
+} from "@src/utils/http/http-client.ts";
 import {
   ChatCompletionOptions,
   ChatCompletionResponse,
@@ -7,10 +12,24 @@ import {
 } from "@src/core/ports/llm.ts";
 import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import { normalizeLLMResponse } from "@src/utils/llm-output.ts";
-import { ProviderError } from "@src/core/errors/provider-error.ts";
+import {
+  classifyHttpProviderError,
+  ProviderError,
+} from "@src/core/errors/provider-error.ts";
 import { redactSensitiveText } from "@src/utils/security/redact.ts";
 
 type LLMConfig = ResolvedTrendPublishConfig["providers"]["ai"];
+
+interface OpenAICompatibleHttpClient {
+  request<T>(
+    url: string,
+    options?: RequestInit & {
+      timeout?: number;
+      retries?: number;
+      retryDelay?: number;
+    },
+  ): Promise<T>;
+}
 
 export class OpenAICompatibleLLM implements LLMProvider {
   private baseURL!: string;
@@ -18,14 +37,14 @@ export class OpenAICompatibleLLM implements LLMProvider {
   private defaultModel!: string;
   private availableModels: string[] = [];
   private timeoutMs = 300000;
-  private maxAttempts = 1;
-  private httpClient: HttpClient;
+  private maxAttempts = 2;
 
   constructor(
     private llmConfig?: LLMConfig,
     private specifiedModel?: string,
+    private readonly httpClient: OpenAICompatibleHttpClient = HttpClient
+      .getInstance(),
   ) {
-    this.httpClient = HttpClient.getInstance();
   }
 
   async initialize(): Promise<void> {
@@ -113,23 +132,57 @@ export class OpenAICompatibleLLM implements LLMProvider {
             stream: options.stream ?? false,
             response_format: options.response_format,
           }),
-          timeout: this.timeoutMs,
-          retries: this.maxAttempts,
+          timeout: resolveRequestTimeoutMs(options.timeoutMs, this.timeoutMs),
+          retries: resolveRequestMaxAttempts(
+            options.maxAttempts,
+            this.maxAttempts,
+          ),
           retryDelay: 1000, // 重试间隔1秒
         },
       );
       return normalizeLLMResponse(response);
     } catch (error) {
-      throw new ProviderError({
-        provider: "openai-compatible",
-        kind: "invalid_response",
-        message: `创建聊天完成失败: ${
-          redactSensitiveText(error instanceof Error ? error.message : error)
-        }`,
-        cause: error,
-      });
+      throw toOpenAICompatibleProviderError(error);
     }
   }
+}
+
+function toOpenAICompatibleProviderError(error: unknown): ProviderError {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const message = `创建聊天完成失败: ${redactSensitiveText(rawMessage)}`;
+
+  if (error instanceof TimeoutError) {
+    return new ProviderError({
+      provider: "openai-compatible",
+      kind: "timeout",
+      message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof NetworkError) {
+    return new ProviderError({
+      provider: "openai-compatible",
+      kind: "network",
+      message,
+      cause: error,
+    });
+  }
+
+  if (error instanceof HttpError && error.statusCode !== undefined) {
+    return classifyHttpProviderError(
+      "openai-compatible",
+      error.statusCode,
+      message,
+    );
+  }
+
+  return new ProviderError({
+    provider: "openai-compatible",
+    kind: "invalid_response",
+    message,
+    cause: error,
+  });
 }
 
 function normalizeTimeoutMs(value?: number): number {
@@ -143,7 +196,23 @@ function normalizeTimeoutMs(value?: number): number {
 function normalizeMaxAttempts(value?: number): number {
   const attempts = Number(value);
   if (!Number.isFinite(attempts)) {
-    return 1;
+    return 2;
   }
   return Math.max(1, Math.min(Math.floor(attempts), 5));
+}
+
+function resolveRequestTimeoutMs(
+  optionTimeoutMs: number | undefined,
+  providerTimeoutMs: number,
+): number {
+  if (optionTimeoutMs === undefined) return providerTimeoutMs;
+  return Math.min(normalizeTimeoutMs(optionTimeoutMs), providerTimeoutMs);
+}
+
+function resolveRequestMaxAttempts(
+  optionMaxAttempts: number | undefined,
+  providerMaxAttempts: number,
+): number {
+  if (optionMaxAttempts === undefined) return providerMaxAttempts;
+  return Math.min(normalizeMaxAttempts(optionMaxAttempts), providerMaxAttempts);
 }

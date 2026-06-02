@@ -1,15 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileJson } from "lucide-react";
-import { apiArtifact } from "../api/client.ts";
+import {
+  apiArtifact,
+  deleteTopicFeedback,
+  getTopicFeedback,
+  saveTopicFeedback,
+} from "../api/client.ts";
 import type {
+  AccountLearningSnapshot,
   ArticlePlan,
   ArticleQualityReview,
   ArticleRunDetail,
   ArtifactRef,
   EditorialDecision,
+  EditorialTopicFeedback,
+  EditorialTopicFeedbackAction,
   EditorialTopicReport,
   PublishArtifactResult,
+  TopicCluster,
   TopicRecommendation,
+  WeixinAccountInsight,
+  WeixinAccountProfile,
 } from "../api/types.ts";
 import { ArticleQualityShell } from "../components/article-quality-shell.tsx";
 import {
@@ -86,6 +97,15 @@ function findPublishArtifact(run: ArticleRunDetail | null): ArtifactRef | null {
   ) ?? null;
 }
 
+function findAccountLearningArtifact(
+  run: ArticleRunDetail | null,
+): ArtifactRef | null {
+  return collectArtifacts(run).find((artifact) =>
+    artifact.key.includes("account-learning") ||
+    artifact.label === "账号学习快照"
+  ) ?? null;
+}
+
 function recommendationLabel(value: TopicRecommendation) {
   switch (value) {
     case "lead":
@@ -106,21 +126,453 @@ function recommendationTone(value: TopicRecommendation) {
   return "muted";
 }
 
-function TopicsWorkspace(
+function topicFeedbackActionLabel(value: EditorialTopicFeedbackAction) {
+  if (value === "lead") return "锁主线";
+  if (value === "adopt") return "采用";
+  return "跳过";
+}
+
+function topicFeedbackTone(value: EditorialTopicFeedbackAction) {
+  if (value === "lead") return "success";
+  if (value === "adopt") return "info";
+  return "danger";
+}
+
+function accountDisplayName(
+  account?: WeixinAccountProfile,
+  accountId?: string,
+) {
+  if (!account && !accountId) return "未指定账号";
+  const brandName = account?.brand?.displayName;
+  return typeof brandName === "string" && brandName.trim()
+    ? brandName.trim()
+    : account?.name ?? accountId ?? "未指定账号";
+}
+
+function textValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function formatDate(value?: string) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function profileScoreTone(score: number) {
+  if (score >= 75) return "success";
+  if (score >= 50) return "warning";
+  return "danger";
+}
+
+function LearningWorkspace(
   {
     run,
     apiKey,
+    account,
+    accountInsight,
     onPreviewArtifact,
   }: {
     run: ArticleRunDetail | null;
     apiKey: string;
+    account?: WeixinAccountProfile;
+    accountInsight?: WeixinAccountInsight;
+    onPreviewArtifact: (artifact: ArtifactRef) => void;
+  },
+) {
+  const artifact = useMemo(() => findAccountLearningArtifact(run), [run]);
+  const [snapshot, setSnapshot] = useState<AccountLearningSnapshot | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!artifact) {
+      setSnapshot(null);
+      setError("");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    apiArtifact(
+      `/api/artifacts?key=${encodeURIComponent(artifact.key)}`,
+      apiKey,
+    )
+      .then(async (response) =>
+        setSnapshot(
+          JSON.parse(await response.text()) as AccountLearningSnapshot,
+        )
+      )
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err))
+      )
+      .finally(() => setLoading(false));
+  }, [artifact, apiKey]);
+
+  if (!run) {
+    return (
+      <Card>
+        <EmptyState>选择一条运行记录查看账号学习依据</EmptyState>
+      </Card>
+    );
+  }
+
+  if (!artifact) {
+    return (
+      <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="tp-title text-base font-semibold">账号学习依据</h2>
+          <Badge>{run.runId}</Badge>
+        </div>
+        <EmptyState>
+          当前 run
+          还没有账号学习快照。新版本运行后会生成画像、反馈和学习规则摘要。
+        </EmptyState>
+      </Card>
+    );
+  }
+
+  const accountName = accountDisplayName(account, run.accountId);
+  const profileScore = snapshot?.profile.completenessScore ??
+    accountInsight?.learning.profileCompleteness.score ?? 0;
+  const feedbackCounts = snapshot?.feedback.counts ?? {
+    good: accountInsight?.feedbackCounts.good ?? 0,
+    ok: accountInsight?.feedbackCounts.ok ?? 0,
+    bad: accountInsight?.feedbackCounts.bad ?? 0,
+  };
+  const topicCounts = snapshot?.topicFeedback.counts ?? {
+    lead: accountInsight?.topicFeedbackCounts.lead ?? 0,
+    adopt: accountInsight?.topicFeedbackCounts.adopt ?? 0,
+    skip: accountInsight?.topicFeedbackCounts.skip ?? 0,
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge>{run.runId}</Badge>
+              <Badge>{accountName}</Badge>
+              {snapshot && (
+                <Badge
+                  tone={snapshot.memoryScope === "account-strict"
+                    ? "success"
+                    : "warning"}
+                >
+                  {snapshot.memoryScope === "account-strict"
+                    ? "账号独立记忆"
+                    : "混合/全局记忆"}
+                </Badge>
+              )}
+              <Badge tone={profileScoreTone(profileScore)}>
+                画像 {profileScore}%
+              </Badge>
+            </div>
+            <h2 className="tp-title text-lg font-semibold">账号学习依据</h2>
+            <p className="tp-muted mt-1 text-sm leading-6">
+              这里解释本次文章生成前系统读到了哪些账号画像、人工反馈、主题取舍和来源信号。
+              这些信息会影响下一次选题和编辑决策。
+            </p>
+          </div>
+          <Button size="sm" onClick={() => onPreviewArtifact(artifact)}>
+            <FileJson className="size-3.5" />
+            查看 JSON
+          </Button>
+        </div>
+      </Card>
+
+      {loading && (
+        <Card>
+          <EmptyState>正在加载账号学习快照...</EmptyState>
+        </Card>
+      )}
+      {error && (
+        <div className="tp-danger rounded-md border p-3 text-sm">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && snapshot && (
+        <>
+          <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+            <Card>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="tp-title text-base font-semibold">画像摘要</h3>
+                <Badge tone={profileScoreTone(profileScore)}>
+                  完整度 {profileScore}%
+                </Badge>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <MetricChip
+                  label="账号定位"
+                  value={snapshot.profile.positioning ?? "未配置"}
+                />
+                <MetricChip
+                  label="目标读者"
+                  value={snapshot.profile.audience ?? "未配置"}
+                />
+                <MetricChip
+                  label="语气风格"
+                  value={snapshot.profile.tone ?? "未配置"}
+                />
+                <MetricChip
+                  label="标题偏好"
+                  value={snapshot.profile.titleStyle ?? "未配置"}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {snapshot.profile.presentFields.map((field) => (
+                  <Badge key={field} tone="success">已配置 · {field}</Badge>
+                ))}
+                {snapshot.profile.missingFields.map((field) => (
+                  <Badge key={field} tone="warning">缺少 · {field}</Badge>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="tp-title text-base font-semibold">反馈入账</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <MetricChip label="好评" value={feedbackCounts.good} />
+                <MetricChip label="一般" value={feedbackCounts.ok} />
+                <MetricChip label="差评" value={feedbackCounts.bad} />
+                <MetricChip label="锁主线" value={topicCounts.lead} />
+                <MetricChip label="采用" value={topicCounts.adopt} />
+                <MetricChip label="跳过" value={topicCounts.skip} />
+              </div>
+              {(snapshot.feedback.latestGood || snapshot.feedback.latestBad) &&
+                (
+                  <div className="mt-3 space-y-2">
+                    {snapshot.feedback.latestGood && (
+                      <p className="rounded-md border border-[#bbf7d0] bg-[#ecfdf5] p-2.5 text-sm leading-6 text-[#047857]">
+                        延续正反馈：{snapshot.feedback.latestGood}
+                      </p>
+                    )}
+                    {snapshot.feedback.latestBad && (
+                      <p className="rounded-md border border-[#fecaca] bg-[#fef2f2] p-2.5 text-sm leading-6 text-[#b91c1c]">
+                        规避差反馈：{snapshot.feedback.latestBad}
+                      </p>
+                    )}
+                  </div>
+                )}
+            </Card>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+            <Card>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="tp-title text-base font-semibold">
+                  本次应用的写作指导
+                </h3>
+                <Badge>{snapshot.appliedGuidance.length}</Badge>
+              </div>
+              {snapshot.appliedGuidance.length
+                ? (
+                  <div className="grid gap-2">
+                    {snapshot.appliedGuidance.map((item, index) => (
+                      <div
+                        key={`${item}-${index}`}
+                        className="rounded-md border border-[#e2e8f0] bg-[#ffffff]/58 p-3 text-sm leading-6 text-[#334155]"
+                      >
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                )
+                : <EmptyState>暂无明确写作指导</EmptyState>}
+            </Card>
+
+            <Card>
+              <h3 className="tp-title mb-3 text-base font-semibold">
+                主题取舍记忆
+              </h3>
+              <TopicFeedbackList
+                title="锁主线"
+                tone="success"
+                values={snapshot.topicFeedback.lead}
+              />
+              <TopicFeedbackList
+                title="采用"
+                tone="info"
+                values={snapshot.topicFeedback.adopt}
+              />
+              <TopicFeedbackList
+                title="跳过"
+                tone="danger"
+                values={snapshot.topicFeedback.skip}
+              />
+            </Card>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Card>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="tp-title text-base font-semibold">
+                  确定性学习规则
+                </h3>
+                <Badge>{snapshot.deterministicRules.length}</Badge>
+              </div>
+              <div className="space-y-2">
+                {snapshot.deterministicRules.map((rule, index) => (
+                  <div
+                    key={`${rule}-${index}`}
+                    className="rounded-md border border-[#e2e8f0] bg-[#f8fafc] p-3 text-sm leading-6 text-[#334155]"
+                  >
+                    {rule}
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="tp-title text-base font-semibold">来源信号</h3>
+                <Badge>{snapshot.sourceSignals.length} sources</Badge>
+              </div>
+              {snapshot.sourceSignals.length
+                ? (
+                  <div className="space-y-2">
+                    {snapshot.sourceSignals.slice(0, 6).map((source) => (
+                      <div
+                        key={`${source.group}-${source.url}`}
+                        className="rounded-md border border-[#e2e8f0] bg-[#ffffff]/58 p-3"
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="tp-title min-w-0 truncate text-sm font-medium">
+                            {hostLabel(source.url)}
+                          </span>
+                          <Badge
+                            tone={source.lastStatus === "succeeded"
+                              ? "success"
+                              : source.lastStatus === "failed"
+                              ? "danger"
+                              : "warning"}
+                          >
+                            {source.successRate}%
+                          </Badge>
+                        </div>
+                        <p className="tp-muted text-xs leading-5">
+                          {source.group} · 有效文章 {source.totalArticles}{" "}
+                          · 最近 {source.lastStatus}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )
+                : <EmptyState>暂无来源表现记录</EmptyState>}
+            </Card>
+          </div>
+
+          <Card>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="tp-title text-base font-semibold">近期文章记忆</h3>
+              <Badge>{snapshot.recentArticles.length}</Badge>
+            </div>
+            {snapshot.recentArticles.length
+              ? (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {snapshot.recentArticles.slice(0, 6).map((article) => (
+                    <div
+                      key={`${article.createdAt}-${article.title}`}
+                      className="rounded-md border border-[#e2e8f0] p-3"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        {article.qualityScore !== undefined && (
+                          <Badge
+                            tone={article.qualityScore >= 85
+                              ? "success"
+                              : article.qualityScore >= 75
+                              ? "info"
+                              : "warning"}
+                          >
+                            {article.qualityScore} 分
+                          </Badge>
+                        )}
+                        <Badge>{article.publishStatus}</Badge>
+                      </div>
+                      <h4 className="tp-title text-sm font-semibold leading-6">
+                        {article.title}
+                      </h4>
+                      <p className="tp-muted mt-1 text-xs">
+                        {formatDate(article.createdAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )
+              : <EmptyState>暂无近期文章记忆</EmptyState>}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TopicFeedbackList(
+  { title, tone, values }: {
+    title: string;
+    tone: "success" | "info" | "danger";
+    values: string[];
+  },
+) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <div className="mb-2 flex items-center gap-2">
+        <Badge tone={tone}>{title}</Badge>
+        <span className="tp-muted text-xs">{values.length}</span>
+      </div>
+      {values.length
+        ? (
+          <div className="flex flex-wrap gap-1.5">
+            {values.slice(0, 8).map((item) => (
+              <span
+                key={item}
+                className="rounded-full border border-[#e2e8f0] bg-[#ffffff]/70 px-2 py-1 text-xs text-[#475569]"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        )
+        : <p className="tp-muted text-xs">暂无</p>}
+    </div>
+  );
+}
+
+function TopicsWorkspace(
+  {
+    run,
+    apiKey,
+    account,
+    accountInsight,
+    onPreviewArtifact,
+  }: {
+    run: ArticleRunDetail | null;
+    apiKey: string;
+    account?: WeixinAccountProfile;
+    accountInsight?: WeixinAccountInsight;
     onPreviewArtifact: (artifact: ArtifactRef) => void;
   },
 ) {
   const artifact = useMemo(() => findTopicArtifact(run), [run]);
+  const decisionArtifact = useMemo(() => findEditorialDecisionArtifact(run), [
+    run,
+  ]);
   const [report, setReport] = useState<EditorialTopicReport | null>(null);
+  const [decision, setDecision] = useState<EditorialDecision | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [topicFeedback, setTopicFeedback] = useState<
+    EditorialTopicFeedback[]
+  >([]);
+  const [topicFeedbackError, setTopicFeedbackError] = useState("");
+  const [feedbackSavingTopic, setFeedbackSavingTopic] = useState("");
 
   useEffect(() => {
     if (!artifact) {
@@ -142,6 +594,46 @@ function TopicsWorkspace(
       )
       .finally(() => setLoading(false));
   }, [artifact, apiKey]);
+
+  useEffect(() => {
+    if (!decisionArtifact) {
+      setDecision(null);
+      return;
+    }
+    apiArtifact(
+      `/api/artifacts?key=${encodeURIComponent(decisionArtifact.key)}`,
+      apiKey,
+    )
+      .then(async (response) =>
+        setDecision(JSON.parse(await response.text()) as EditorialDecision)
+      )
+      .catch(() => setDecision(null));
+  }, [decisionArtifact, apiKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!run) {
+      setTopicFeedback([]);
+      setTopicFeedbackError("");
+      return;
+    }
+    setTopicFeedbackError("");
+    getTopicFeedback(apiKey, run.runId)
+      .then((data) => {
+        if (!cancelled) setTopicFeedback(data.feedback);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTopicFeedback([]);
+          setTopicFeedbackError(
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [run, apiKey]);
 
   if (!run) {
     return (
@@ -168,6 +660,12 @@ function TopicsWorkspace(
   const scoreByTopic = new Map(
     report?.scores.map((score) => [score.topicId, score]) ?? [],
   );
+  const selectedByTopic = new Map(
+    decision?.selectedTopics.map((topic) => [topic.topicId, topic]) ?? [],
+  );
+  const skippedByTopic = new Map(
+    decision?.skippedTopics.map((topic) => [topic.topicId, topic]) ?? [],
+  );
   const sortedClusters = [...(report?.clusters ?? [])].sort((left, right) =>
     (scoreByTopic.get(right.id)?.finalScore ?? 0) -
     (scoreByTopic.get(left.id)?.finalScore ?? 0)
@@ -175,6 +673,59 @@ function TopicsWorkspace(
   const leadCount =
     report?.scores.filter((score) => score.recommendedUse === "lead").length ??
       0;
+  const skippedCount = decision?.skippedTopics.length ?? 0;
+  const selectedCount = decision?.selectedTopics.length ?? 0;
+  const topicFeedbackByTopic = new Map(
+    topicFeedback.map((item) => [item.topicId, item]),
+  );
+  const accountName = accountDisplayName(account, run.accountId);
+  const accountPositioning = textValue(account?.brand?.positioning);
+  const accountAudience = textValue(account?.brand?.audience);
+  const accountTone = textValue(account?.brand?.tone);
+  const accountGuidance = accountInsight?.learning.writingGuidance ?? [];
+
+  async function markTopicFeedback(
+    cluster: TopicCluster,
+    action: EditorialTopicFeedbackAction,
+  ) {
+    if (!run) return;
+    setFeedbackSavingTopic(cluster.id);
+    try {
+      const label = topicFeedbackActionLabel(action);
+      const data = await saveTopicFeedback(apiKey, run.runId, cluster.id, {
+        action,
+        title: cluster.title,
+        reason: `用户在选题工作台标记为${label}`,
+        profileId: run.profileId,
+        accountId: run.accountId,
+      });
+      setTopicFeedback((current) => [
+        data.feedback,
+        ...current.filter((item) => item.topicId !== cluster.id),
+      ]);
+      setTopicFeedbackError("");
+    } catch (err) {
+      setTopicFeedbackError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFeedbackSavingTopic("");
+    }
+  }
+
+  async function clearTopicFeedback(cluster: TopicCluster) {
+    if (!run) return;
+    setFeedbackSavingTopic(cluster.id);
+    try {
+      await deleteTopicFeedback(apiKey, run.runId, cluster.id);
+      setTopicFeedback((current) =>
+        current.filter((item) => item.topicId !== cluster.id)
+      );
+      setTopicFeedbackError("");
+    } catch (err) {
+      setTopicFeedbackError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFeedbackSavingTopic("");
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -185,10 +736,15 @@ function TopicsWorkspace(
               <Badge>{run.runId}</Badge>
               {report?.fallback && <Badge tone="danger">fallback</Badge>}
               {report && <Badge tone="success">{leadCount} 个主线候选</Badge>}
+              {decision && <Badge>{selectedCount} 个入选</Badge>}
+              {decision && skippedCount > 0 && (
+                <Badge tone="warning">{skippedCount} 个跳过</Badge>
+              )}
+              <Badge>{accountName}</Badge>
             </div>
-            <h2 className="tp-title text-lg font-semibold">今日选题</h2>
+            <h2 className="tp-title text-lg font-semibold">选题工作台</h2>
             <p className="tp-muted mt-1 text-sm leading-6">
-              系统先把抓取内容聚成主题，再按新鲜度、相关性、影响、证据和风险给出编辑建议。
+              先审主题，再看账号适配和编辑取舍：哪些做主线、哪些做辅助、哪些应该跳过。
             </p>
             {report?.error && (
               <div className="tp-danger mt-3 rounded-md border p-3 text-sm">
@@ -213,67 +769,207 @@ function TopicsWorkspace(
           {error}
         </div>
       )}
+      {topicFeedbackError && (
+        <div className="tp-danger rounded-md border p-3 text-sm">
+          主题反馈保存失败：{topicFeedbackError}
+        </div>
+      )}
 
       {!loading && !error && report && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {sortedClusters.map((cluster) => {
-            const score = scoreByTopic.get(cluster.id);
-            return (
-              <Card key={cluster.id} className="p-3">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                      <Badge
-                        tone={recommendationTone(
-                          score?.recommendedUse ??
-                            "watch",
-                        )}
-                      >
-                        {recommendationLabel(score?.recommendedUse ?? "watch")}
-                      </Badge>
-                      <Badge>{score?.finalScore ?? "-"} 分</Badge>
-                      <Badge>{cluster.sourceCount} sources</Badge>
-                    </div>
-                    <h3 className="tp-title text-base font-semibold leading-6">
-                      {cluster.title}
-                    </h3>
-                  </div>
-                </div>
-                <p className="tp-muted text-sm leading-6">{cluster.summary}</p>
-                {score?.reason && (
-                  <div className="mt-3 rounded-md border border-[#e2e8f0] bg-[#ffffff]/58 p-2.5 text-sm leading-6 text-[#475569]">
-                    {score.reason}
+        <>
+          <div className="grid gap-3 lg:grid-cols-[1fr_320px]">
+            <Card>
+              <h3 className="tp-title text-base font-semibold">账号适配</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <MetricChip label="目标账号" value={accountName} />
+                <MetricChip
+                  label="账号定位"
+                  value={accountPositioning || "未配置"}
+                />
+                <MetricChip
+                  label="目标读者"
+                  value={accountAudience || "未配置"}
+                />
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {accountTone && (
+                  <div className="rounded-md border border-[#e2e8f0] bg-[#ffffff]/58 p-3 text-sm leading-6 text-[#475569]">
+                    表达语气：{accountTone}
                   </div>
                 )}
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <MetricChip label="新鲜度" value={score?.novelty ?? "-"} />
-                  <MetricChip label="相关性" value={score?.relevance ?? "-"} />
-                  <MetricChip label="影响" value={score?.impact ?? "-"} />
-                  <MetricChip label="证据" value={score?.evidence ?? "-"} />
-                  <MetricChip
-                    label="可行动"
-                    value={score?.actionability ?? "-"}
-                  />
-                  <MetricChip label="风险" value={score?.risk ?? "-"} />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {cluster.keywords.slice(0, 6).map((keyword) => (
-                    <span
-                      key={keyword}
-                      className="rounded-full bg-[#eff6ff] px-2 py-0.5 text-xs text-[#64748b]"
+                {decision?.decisionSummary && (
+                  <div className="rounded-md border border-[#e2e8f0] bg-[#ffffff]/58 p-3 text-sm leading-6 text-[#475569]">
+                    编辑判断：{decision.decisionSummary}
+                  </div>
+                )}
+              </div>
+            </Card>
+            <Card>
+              <h3 className="tp-title text-base font-semibold">审题提醒</h3>
+              <div className="mt-3 space-y-2">
+                {(accountGuidance.length ? accountGuidance.slice(0, 4) : [
+                  "先确认主线是否服务账号定位。",
+                  "避免只按热度选题，优先看证据和读者收益。",
+                ]).map((item) => (
+                  <p
+                    key={item}
+                    className="rounded-md border border-[#e2e8f0] bg-[#ffffff]/58 p-2.5 text-sm leading-6 text-[#475569]"
+                  >
+                    {item}
+                  </p>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {sortedClusters.map((cluster) => {
+              const score = scoreByTopic.get(cluster.id);
+              const selected = selectedByTopic.get(cluster.id);
+              const skipped = skippedByTopic.get(cluster.id);
+              const manualFeedback = topicFeedbackByTopic.get(cluster.id);
+              const decisionReason = selected?.reason ?? skipped?.reason;
+              const decisionTone = skipped
+                ? "danger"
+                : selected?.role === "lead"
+                ? "success"
+                : selected
+                ? "info"
+                : "muted";
+              return (
+                <Card key={cluster.id} className="p-3">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                        <Badge
+                          tone={recommendationTone(
+                            score?.recommendedUse ??
+                              "watch",
+                          )}
+                        >
+                          {recommendationLabel(
+                            score?.recommendedUse ?? "watch",
+                          )}
+                        </Badge>
+                        <Badge tone={decisionTone}>
+                          {skipped
+                            ? "已跳过"
+                            : selected
+                            ? `已入选 · ${selected.role}`
+                            : "待判断"}
+                        </Badge>
+                        <Badge>{score?.finalScore ?? "-"} 分</Badge>
+                        <Badge>{cluster.sourceCount} sources</Badge>
+                        {manualFeedback && (
+                          <Badge
+                            tone={topicFeedbackTone(manualFeedback.action)}
+                          >
+                            人工 · {topicFeedbackActionLabel(
+                              manualFeedback.action,
+                            )}
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="tp-title text-base font-semibold leading-6">
+                        {cluster.title}
+                      </h3>
+                    </div>
+                  </div>
+                  <p className="tp-muted text-sm leading-6">
+                    {cluster.summary}
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    {score?.reason && (
+                      <div className="rounded-md border border-[#e2e8f0] bg-[#ffffff]/58 p-2.5 text-sm leading-6 text-[#475569]">
+                        推荐理由：{score.reason}
+                      </div>
+                    )}
+                    {decisionReason && (
+                      <div className="rounded-md border border-[#e2e8f0] bg-[#f8fafc] p-2.5 text-sm leading-6 text-[#334155]">
+                        编辑取舍：{decisionReason}
+                      </div>
+                    )}
+                    {manualFeedback?.reason && (
+                      <div className="rounded-md border border-[#fed7aa] bg-[#fff7ed] p-2.5 text-sm leading-6 text-[#9a3412]">
+                        人工取舍：{manualFeedback.reason}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--tp-border)] pt-3">
+                    <Button
+                      size="sm"
+                      variant={manualFeedback?.action === "lead"
+                        ? "primary"
+                        : "secondary"}
+                      disabled={feedbackSavingTopic === cluster.id}
+                      onClick={() => markTopicFeedback(cluster, "lead")}
                     >
-                      {keyword}
-                    </span>
-                  ))}
-                </div>
-                <div className="tp-muted mt-3 truncate text-xs">
-                  Primary: {cluster.primaryArticleId} · Articles:{" "}
-                  {cluster.articleIds.join(", ")}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+                      锁主线
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={manualFeedback?.action === "adopt"
+                        ? "primary"
+                        : "secondary"}
+                      disabled={feedbackSavingTopic === cluster.id}
+                      onClick={() => markTopicFeedback(cluster, "adopt")}
+                    >
+                      采用
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={manualFeedback?.action === "skip"
+                        ? "danger"
+                        : "secondary"}
+                      disabled={feedbackSavingTopic === cluster.id}
+                      onClick={() => markTopicFeedback(cluster, "skip")}
+                    >
+                      跳过
+                    </Button>
+                    {manualFeedback && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={feedbackSavingTopic === cluster.id}
+                        onClick={() => clearTopicFeedback(cluster)}
+                      >
+                        清除
+                      </Button>
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <MetricChip label="新鲜度" value={score?.novelty ?? "-"} />
+                    <MetricChip
+                      label="相关性"
+                      value={score?.relevance ?? "-"}
+                    />
+                    <MetricChip label="影响" value={score?.impact ?? "-"} />
+                    <MetricChip label="证据" value={score?.evidence ?? "-"} />
+                    <MetricChip
+                      label="可行动"
+                      value={score?.actionability ?? "-"}
+                    />
+                    <MetricChip label="风险" value={score?.risk ?? "-"} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {cluster.keywords.slice(0, 6).map((keyword) => (
+                      <span
+                        key={keyword}
+                        className="rounded-full bg-[#eff6ff] px-2 py-0.5 text-xs text-[#64748b]"
+                      >
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="tp-muted mt-3 truncate text-xs">
+                    Primary: {cluster.primaryArticleId} · Articles:{" "}
+                    {cluster.articleIds.join(", ")}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
@@ -984,18 +1680,37 @@ export function ArticleQualityWorkspace(
   {
     run,
     apiKey,
+    accounts,
+    insights,
     onPreviewArtifact,
   }: {
     run: ArticleRunDetail | null;
     apiKey: string;
+    accounts?: WeixinAccountProfile[];
+    insights?: WeixinAccountInsight[];
     onPreviewArtifact: (artifact: ArtifactRef) => void;
   },
 ) {
+  const accountId = run?.accountId ?? "default";
+  const account = accounts?.find((item) => item.id === accountId);
+  const accountInsight = insights?.find((item) => item.accountId === accountId);
   return (
     <ArticleQualityShell
       runStatus={run?.status}
+      accountId={run?.accountId}
+      profileId={run?.profileId}
       renderTab={(tab) => (
-        tab === "review"
+        tab === "learning"
+          ? (
+            <LearningWorkspace
+              run={run}
+              apiKey={apiKey}
+              account={account}
+              accountInsight={accountInsight}
+              onPreviewArtifact={onPreviewArtifact}
+            />
+          )
+          : tab === "review"
           ? (
             <QualityReviewWorkspace
               run={run}
@@ -1008,6 +1723,8 @@ export function ArticleQualityWorkspace(
             <TopicsWorkspace
               run={run}
               apiKey={apiKey}
+              account={account}
+              accountInsight={accountInsight}
               onPreviewArtifact={onPreviewArtifact}
             />
           )

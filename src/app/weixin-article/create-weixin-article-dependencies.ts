@@ -38,6 +38,7 @@ import { WeixinArticleTitleService } from "@src/features/weixin-article/services
 import { WeixinArticleEditorialTopicService } from "@src/features/weixin-article/services/editorial-topic.service.ts";
 import { WeixinArticleEditorialDecisionService } from "@src/features/weixin-article/services/editorial-decision.service.ts";
 import { WeixinArticlePlanService } from "@src/features/weixin-article/services/article-plan.service.ts";
+import { WeixinArticleDraftService } from "@src/features/weixin-article/services/article-draft.service.ts";
 import { WeixinArticleResearchService } from "@src/features/weixin-article/services/article-research.service.ts";
 import { WeixinArticleQualityReviewService } from "@src/features/weixin-article/services/quality-review.service.ts";
 import { WeixinArticleRevisionService } from "@src/features/weixin-article/services/article-revision.service.ts";
@@ -182,11 +183,16 @@ export async function createWeixinArticleDependencies(
     editorialDecisionService: new WeixinArticleEditorialDecisionService(
       llmProvider,
       promptProfile,
+      accountBrand,
     ),
     articlePlanService: new WeixinArticlePlanService(
       llmProvider,
       promptProfile,
       accountBrand,
+    ),
+    articleDraftService: new WeixinArticleDraftService(
+      llmProvider,
+      promptProfile,
     ),
     researchService: new WeixinArticleResearchService(
       articleFetchRouter,
@@ -217,6 +223,7 @@ export async function createWeixinArticleDependencies(
       dryRun: config.features.article.dryRun,
       profileId: options.profileId,
       accountId: effectiveAccountId,
+      accountBrand,
       runtimeConfigSnapshot: options.runtimeConfigSnapshot,
       qualityGate: config.features.article.qualityGate,
     },

@@ -207,6 +207,7 @@ function defaultWeixinAccountProfile(id: string): Omit<
     defaults: {
       articleProfileId: DEFAULT_ARTICLE_PROFILE_ID,
     },
+    ops: {},
   };
 }
 
@@ -350,9 +351,10 @@ export async function resolveArticleRuntimeConfig(
   const notification = article.notifications.profileId
     ? await requireCapability(store, article.notifications.profileId)
     : null;
+  const selectedSources = applyAccountSourceGroups(detail.sources, account);
 
   next.fetchGroups = detail.fetchGroups;
-  next.features.article.sources = detail.sources
+  next.features.article.sources = selectedSources
     .filter((source) => source.enabled)
     .sort((a, b) => a.position - b.position)
     .map((source) => source.raw);
@@ -446,6 +448,7 @@ export async function resolveArticleRuntimeConfig(
       },
       article,
       account ?? undefined,
+      selectedSources,
     ),
   };
 }
@@ -471,6 +474,34 @@ function applyAccountDefaults(
   const count = numberValue(account.defaults.count);
   if (count) next.count = Math.min(Math.max(Math.floor(count), 1), 50);
   return next;
+}
+
+function applyAccountSourceGroups(
+  sources: RuntimeArticleSource[],
+  account: WeixinAccountProfile | null,
+): RuntimeArticleSource[] {
+  const groups = readSourceGroupIds(account?.defaults.sourceGroupIds);
+  if (groups.length === 0) return sources;
+
+  const selected = sources.filter((source) => groups.includes(source.group));
+  if (selected.some((source) => source.enabled)) return selected;
+
+  throw new Error(
+    `账号 ${
+      account?.name ?? account?.id ?? "default"
+    } 的数据源分组没有可用来源: ${groups.join(", ")}`,
+  );
+}
+
+function readSourceGroupIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter((item): item is string => typeof item === "string").map((
+        item,
+      ) => item.trim()).filter(Boolean),
+    ),
+  ];
 }
 
 export async function saveArticleProfileConfig(
@@ -581,6 +612,7 @@ export function defaultArticleProfileConfig(
       enabled: article.qualityGate.enabled,
       minScore: article.qualityGate.minScore,
       blockOnHighFactIssue: article.qualityGate.blockOnHighFactIssue,
+      forcePublish: article.qualityGate.forcePublish,
       allowForcePublish: article.qualityGate.allowForcePublish,
       maxRevisionRounds: article.qualityGate.maxRevisionRounds,
     },
@@ -673,6 +705,8 @@ export function readArticleConfig(
         fallback.qualityGate.minScore,
       blockOnHighFactIssue: booleanValue(qualityGate.blockOnHighFactIssue) ??
         fallback.qualityGate.blockOnHighFactIssue,
+      forcePublish: booleanValue(qualityGate.forcePublish) ??
+        fallback.qualityGate.forcePublish,
       allowForcePublish: booleanValue(qualityGate.allowForcePublish) ??
         fallback.qualityGate.allowForcePublish,
       maxRevisionRounds: numberValue(qualityGate.maxRevisionRounds) ??
@@ -764,6 +798,7 @@ function articleConfigToResolvedFallback(
       enabled: config.qualityGate.enabled,
       minScore: config.qualityGate.minScore,
       blockOnHighFactIssue: config.qualityGate.blockOnHighFactIssue,
+      forcePublish: config.qualityGate.forcePublish,
       allowForcePublish: config.qualityGate.allowForcePublish,
       maxRevisionRounds: config.qualityGate.maxRevisionRounds,
     },
@@ -871,6 +906,7 @@ function createRuntimeConfigSnapshot(
   },
   article: ArticleFeatureProfileConfig = detail.article,
   account?: WeixinAccountProfile,
+  selectedSources: RuntimeArticleSource[] = detail.sources,
 ): JsonObject {
   return {
     feature: ARTICLE_FEATURE_KEY,
@@ -889,9 +925,10 @@ function createRuntimeConfigSnapshot(
         defaultArticleProfileId: account.defaultArticleProfileId,
         brand: account.brand,
         defaults: account.defaults,
+        ops: account.ops,
       }
       : null,
-    sources: detail.sources
+    sources: selectedSources
       .filter((source) => source.enabled)
       .map((source) => ({
         raw: source.raw,

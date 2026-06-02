@@ -101,3 +101,56 @@ Deno.test("buildSummaryTitle removes fixed daily brief prefix and avoids broken 
     "Google I/O 2026：Gemini 与开发者工具链的产品化转向",
   );
 });
+
+Deno.test("buildSummaryTitle skips clickbait media titles when article plan is conservative", () => {
+  const title = buildSummaryTitle([
+    {
+      id: "1",
+      title: "备用标题",
+      content: "",
+      url: "",
+      publishDate: "",
+      metadata: {},
+    },
+  ], {
+    articlePlan: {
+      generatedAt: "",
+      fallback: false,
+      format: "daily-brief",
+      thesis: "补充证据不足，本期只围绕已确认来源做保守梳理。",
+      targetReader: "",
+      summary: "",
+      sections: [],
+      titleDirections: [{
+        title:
+          "今天凌晨，Claude Opus 4.8上线，融资650亿美金，但更强的还在后面-36氪",
+        angle: "媒体标题",
+        reason: "来自补充证据",
+      }],
+      coverDirection: { visualBrief: "", textBrief: "", mood: "" },
+      bodyImagePlan: { enabled: false, placements: [] },
+      riskNotes: [],
+      sourceArticleIds: [],
+    },
+    editorialDecision: {
+      generatedAt: "",
+      fallback: false,
+      leadTopicId: "topic-1",
+      leadTopicTitle: "Anthropic 完成 650 亿美元融资，Claude Opus 4.8 同步上线",
+      decisionSummary: "",
+      whyThisNow: [],
+      selectedTopics: [],
+      skippedTopics: [],
+      duplicationRisk: { level: "low", reason: "", avoidAngles: [] },
+      sourceJudgements: [],
+      recommendedFormat: "daily-brief",
+      writingDirectives: [],
+      titleWarnings: [],
+    },
+  });
+
+  assertEquals(
+    title,
+    "Anthropic 完成 650 亿美元融资，Claude Opus 4.8 同步上线",
+  );
+});

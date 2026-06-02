@@ -27,12 +27,6 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
-  // Cloudflare paid plan: allow the native Workflow to finish publish in the
-  // same invocation after fetch/AI/R2/D1 work. Free plan rejects cpu_ms.
-  "limits": {
-    "cpu_ms": 300000,
-    "subrequests": 1000
-  },
   "assets": {
     "directory": "./dist/dashboard",
     "binding": "ASSETS"

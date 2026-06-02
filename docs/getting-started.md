@@ -71,6 +71,10 @@ deno task preview
 
 # dry-run 跑一次微信文章流程，不真正发布
 deno task article --dry-run
+
+# 多账号矩阵 dry-run；不传账号时使用全部启用账号
+deno task article --matrix
+deno task article --matrix --account main,lab
 ```
 
 默认会启动在 `http://localhost:8000`，并提供：
@@ -79,6 +83,7 @@ deno task article --dry-run
 - `GET /api/health`：本地服务健康检查。
 - `GET /api/config/summary`：dashboard 使用的脱敏配置摘要。
 - `POST /api/runs`：触发微信文章工作流。
+- `POST /api/runs/matrix`：触发多账号矩阵 dry-run。
 - `POST /api/workflow`：旧 JSON-RPC 兼容入口。
 
 ## 5. Docker 启动

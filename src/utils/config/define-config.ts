@@ -335,6 +335,8 @@ export interface ArticleQualityGateConfig {
   minScore?: number;
   /** 发现高危事实问题时是否阻断真实发布。默认 true。 */
   blockOnHighFactIssue?: boolean;
+  /** 真实发布时是否默认强制发布。开启后审稿不达标也创建草稿，只记录 warning。默认 false。 */
+  forcePublish?: boolean;
   /** 是否允许 forcePublish 绕过质量门禁。默认 true，但会记录 warning。 */
   allowForcePublish?: boolean;
   /** 自动修复轮次上限。0 表示只审稿不修复，默认 1。 */
@@ -627,6 +629,7 @@ export interface ResolvedTrendPublishConfig {
         enabled: boolean;
         minScore: number;
         blockOnHighFactIssue: boolean;
+        forcePublish: boolean;
         allowForcePublish: boolean;
         maxRevisionRounds: number;
       };
@@ -807,7 +810,7 @@ export function resolveTrendPublishConfig(
         apiKey: config.providers?.ai?.apiKey ?? "",
         model: config.providers?.ai?.model ?? "",
         timeoutMs: config.providers?.ai?.timeoutMs ?? 300000,
-        maxAttempts: config.providers?.ai?.maxAttempts ?? 1,
+        maxAttempts: config.providers?.ai?.maxAttempts ?? 2,
       },
       fetch: {
         firecrawl: {
@@ -940,6 +943,7 @@ export function resolveTrendPublishConfig(
           minScore: article.qualityGate?.minScore ?? 80,
           blockOnHighFactIssue: article.qualityGate?.blockOnHighFactIssue ??
             true,
+          forcePublish: article.qualityGate?.forcePublish ?? false,
           allowForcePublish: article.qualityGate?.allowForcePublish ?? true,
           maxRevisionRounds: article.qualityGate?.maxRevisionRounds ?? 1,
         },

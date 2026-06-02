@@ -15,6 +15,7 @@ import { WeixinArticleWorkflowStats } from "@src/features/weixin-article/service
 import { WeixinArticleEditorialTopicService } from "@src/features/weixin-article/services/editorial-topic.service.ts";
 import { WeixinArticleEditorialDecisionService } from "@src/features/weixin-article/services/editorial-decision.service.ts";
 import { WeixinArticlePlanService } from "@src/features/weixin-article/services/article-plan.service.ts";
+import { WeixinArticleDraftService } from "@src/features/weixin-article/services/article-draft.service.ts";
 import { WeixinArticleQualityReviewService } from "@src/features/weixin-article/services/quality-review.service.ts";
 import { WeixinArticleRevisionService } from "@src/features/weixin-article/services/article-revision.service.ts";
 import { WeixinArticleResearchService } from "@src/features/weixin-article/services/article-research.service.ts";
@@ -52,6 +53,7 @@ export interface WeixinArticleDependencies {
   editorialTopicService: WeixinArticleEditorialTopicService;
   editorialDecisionService: WeixinArticleEditorialDecisionService;
   articlePlanService: WeixinArticlePlanService;
+  articleDraftService: WeixinArticleDraftService;
   researchService: WeixinArticleResearchService;
   qualityReviewService: WeixinArticleQualityReviewService;
   revisionService: WeixinArticleRevisionService;

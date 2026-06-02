@@ -66,6 +66,7 @@ export interface ArticleFeatureProfileConfig {
     enabled: boolean;
     minScore: number;
     blockOnHighFactIssue: boolean;
+    forcePublish: boolean;
     allowForcePublish: boolean;
     maxRevisionRounds: number;
   };

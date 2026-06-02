@@ -1,5 +1,5 @@
-import { assertRejects, assertStringIncludes } from "@std/assert";
-import { LLMProvider } from "@src/core/ports/llm.ts";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
+import { ChatCompletionOptions, LLMProvider } from "@src/core/ports/llm.ts";
 import { WeixinDynamicHtmlGenerator } from "@src/features/weixin-article/rendering/dynamic/dynamic-html.generator.ts";
 import { WeixinTemplate } from "@src/features/weixin-article/domain/renderable-article.ts";
 
@@ -49,6 +49,33 @@ ${
   assertStringIncludes(html, "OpenAI 发布新模型");
   assertStringIncludes(html, "参考链接");
   assertStringIncludes(html, "<section");
+});
+
+Deno.test("WeixinDynamicHtmlGenerator uses a bounded LLM call budget", async () => {
+  let chatOptions: ChatCompletionOptions | undefined;
+  const llm: LLMProvider = {
+    initialize: () => Promise.resolve(),
+    refresh: () => Promise.resolve(),
+    setModel: () => {},
+    createChatCompletion: (_messages, options) => {
+      chatOptions = options;
+      return Promise.resolve({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              html: "<section><p>OpenAI发布新模型</p></section>",
+            }),
+          },
+        }],
+      });
+    },
+  };
+  const generator = new WeixinDynamicHtmlGenerator(llm);
+
+  await generator.generate(articles);
+
+  assertEquals(chatOptions?.timeoutMs, 120_000);
+  assertEquals(chatOptions?.maxAttempts, 2);
 });
 
 Deno.test("WeixinDynamicHtmlGenerator rejects invalid JSON", async () => {

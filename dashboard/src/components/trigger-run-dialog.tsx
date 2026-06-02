@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Group, Modal, Stack, Text } from "@mantine/core";
 import { AlertCircle, Loader2 } from "lucide-react";
 import type {
@@ -10,8 +10,17 @@ import type {
 import { Button, Input, Select } from "./ui.tsx";
 
 export function TriggerRunDialog(
-  { open, profiles, accounts, onClose, onSubmit, onSubmitMatrix }: {
+  {
+    open,
+    initialMode = "single",
+    profiles,
+    accounts,
+    onClose,
+    onSubmit,
+    onSubmitMatrix,
+  }: {
     open: boolean;
+    initialMode?: "single" | "matrix";
     profiles: ArticleRuntimeProfileDetail[];
     accounts: WeixinAccountProfile[];
     onClose: () => void;
@@ -21,7 +30,7 @@ export function TriggerRunDialog(
 ) {
   const [mode, setMode] = useState<"single" | "matrix">("single");
   const [dryRun, setDryRun] = useState(true);
-  const [maxArticles, setMaxArticles] = useState("10");
+  const [maxArticles, setMaxArticles] = useState("");
   const [sourceType, setSourceType] = useState("all");
   const [profileId, setProfileId] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -29,9 +38,6 @@ export function TriggerRunDialog(
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const effectiveProfileId = profileId ||
-    profiles.find((item) => item.profile.isDefault)?.profile.id ||
-    profiles[0]?.profile.id;
   const enabledAccounts = accounts.filter((account) => account.enabled);
   const effectiveMatrixAccountIds = matrixAccountIds.length > 0
     ? matrixAccountIds
@@ -39,6 +45,16 @@ export function TriggerRunDialog(
   const canSubmit = mode === "matrix"
     ? effectiveMatrixAccountIds.length > 0
     : dryRun || confirmed;
+
+  useEffect(() => {
+    if (!open) return;
+    setMode(initialMode);
+    if (initialMode === "matrix") {
+      setDryRun(true);
+      setConfirmed(false);
+      setProfileId("");
+    }
+  }, [initialMode, open]);
 
   return (
     <Modal
@@ -59,7 +75,7 @@ export function TriggerRunDialog(
             const basePayload = {
               maxArticles: Number(maxArticles) || undefined,
               sourceType,
-              profileId: effectiveProfileId,
+              profileId: profileId || undefined,
             };
             if (mode === "matrix") {
               await onSubmitMatrix({
@@ -84,7 +100,7 @@ export function TriggerRunDialog(
         <Stack gap="md">
           <Text size="sm" c="dimmed">
             默认先 dry-run 检查产物。矩阵模式会为每个公众号创建独立子
-            run，第一版只允许 dry-run。
+            run，并默认使用各账号自己的文章方案；只有显式选择文章方案时才会统一覆盖。
           </Text>
 
           <div className="grid gap-2 sm:grid-cols-2">
@@ -151,9 +167,14 @@ export function TriggerRunDialog(
             <label className="space-y-1 sm:col-span-2">
               <span className="tp-muted text-xs font-medium">文章方案</span>
               <Select
-                value={effectiveProfileId ?? ""}
+                value={profileId}
                 onChange={(event) => setProfileId(event.currentTarget.value)}
               >
+                <option value="">
+                  {mode === "matrix"
+                    ? "使用每个账号的默认文章方案"
+                    : "使用账号/系统默认文章方案"}
+                </option>
                 {profiles.map((item) => (
                   <option value={item.profile.id} key={item.profile.id}>
                     {item.profile.name}
@@ -168,7 +189,7 @@ export function TriggerRunDialog(
                   value={accountId}
                   onChange={(event) => setAccountId(event.currentTarget.value)}
                 >
-                  <option value="">使用文章方案默认账号</option>
+                  <option value="">使用方案默认账号</option>
                   {enabledAccounts.map((account) => (
                     <option value={account.id} key={account.id}>
                       {account.name} ({account.id})
@@ -229,6 +250,7 @@ export function TriggerRunDialog(
                 type="number"
                 min="1"
                 max="30"
+                placeholder="使用方案默认"
                 value={maxArticles}
                 onChange={(event) => setMaxArticles(event.currentTarget.value)}
               />
@@ -260,7 +282,7 @@ export function TriggerRunDialog(
           {mode === "matrix" && (
             <Alert color="blue" icon={<AlertCircle className="size-4" />}>
               矩阵模式会创建父批次和多个子 run；为了避免误发，当前只支持
-              dry-run。
+              dry-run。未选择文章方案时，每个账号会使用自己的默认文章方案和账号覆盖参数。
             </Alert>
           )}
 

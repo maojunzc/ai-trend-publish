@@ -9,6 +9,8 @@ import type {
   EditorialRunFeedback,
   EditorialRunFeedbackInput,
   EditorialSourceHealthReport,
+  EditorialTopicFeedback,
+  EditorialTopicFeedbackInput,
   SourcePerformanceRecord,
 } from "@src/core/ports/editorial-memory-store.ts";
 
@@ -19,13 +21,40 @@ export class SQLiteEditorialMemoryStore implements EditorialMemoryStore {
 
   async getContext(options: {
     profileId?: string;
+    accountId?: string;
+    strictAccount?: boolean;
     recentLimit?: number;
     sourceLimit?: number;
   } = {}): Promise<EditorialMemoryContext> {
     const db = this.getDb();
     const recentLimit = options.recentLimit ?? 12;
     const sourceLimit = options.sourceLimit ?? 30;
-    const articleRows = options.profileId
+    const articleRows = options.accountId && options.strictAccount
+      ? options.accountId === "default"
+        ? db.prepare(
+          `SELECT * FROM editorial_article_memory
+          WHERE account_id = ? OR account_id IS NULL
+          ORDER BY created_at DESC
+          LIMIT ?`,
+        ).all(options.accountId, recentLimit) as ArticleMemoryRow[]
+        : db.prepare(
+          `SELECT * FROM editorial_article_memory
+        WHERE account_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+        ).all(options.accountId, recentLimit) as ArticleMemoryRow[]
+      : options.accountId
+      ? db.prepare(
+        `SELECT * FROM editorial_article_memory
+        WHERE account_id = ? OR account_id IS NULL
+        ORDER BY CASE WHEN account_id = ? THEN 0 ELSE 1 END, created_at DESC
+        LIMIT ?`,
+      ).all(
+        options.accountId,
+        options.accountId,
+        recentLimit,
+      ) as ArticleMemoryRow[]
+      : options.profileId
       ? db.prepare(
         "SELECT * FROM editorial_article_memory WHERE profile_id = ? OR profile_id IS NULL ORDER BY created_at DESC LIMIT ?",
       ).all(options.profileId, recentLimit) as ArticleMemoryRow[]
@@ -35,17 +64,40 @@ export class SQLiteEditorialMemoryStore implements EditorialMemoryStore {
     const sourceRows = db.prepare(
       "SELECT * FROM editorial_source_performance ORDER BY updated_at DESC LIMIT ?",
     ).all(sourceLimit) as SourcePerformanceRow[];
-    const feedbackRows = options.profileId
+    const feedbackRows = options.accountId && options.strictAccount
+      ? options.accountId === "default"
+        ? db.prepare(
+          `SELECT * FROM editorial_run_feedback
+          WHERE account_id = ? OR account_id IS NULL
+          ORDER BY updated_at DESC
+          LIMIT ?`,
+        ).all(options.accountId, recentLimit) as FeedbackRow[]
+        : db.prepare(
+          `SELECT * FROM editorial_run_feedback
+        WHERE account_id = ?
+        ORDER BY updated_at DESC
+        LIMIT ?`,
+        ).all(options.accountId, recentLimit) as FeedbackRow[]
+      : options.accountId
+      ? db.prepare(
+        `SELECT * FROM editorial_run_feedback
+        WHERE account_id = ? OR account_id IS NULL
+        ORDER BY CASE WHEN account_id = ? THEN 0 ELSE 1 END, updated_at DESC
+        LIMIT ?`,
+      ).all(options.accountId, options.accountId, recentLimit) as FeedbackRow[]
+      : options.profileId
       ? db.prepare(
         "SELECT * FROM editorial_run_feedback WHERE profile_id = ? OR profile_id IS NULL ORDER BY updated_at DESC LIMIT ?",
       ).all(options.profileId, recentLimit) as FeedbackRow[]
       : db.prepare(
         "SELECT * FROM editorial_run_feedback ORDER BY updated_at DESC LIMIT ?",
       ).all(recentLimit) as FeedbackRow[];
+    const topicFeedbackRows = this.listTopicFeedbackRows(options);
     return {
       recentArticles: articleRows.map(rowToArticleMemory),
       sourcePerformance: sourceRows.map(rowToSourcePerformance),
       recentFeedback: feedbackRows.map(rowToFeedback),
+      recentTopicFeedback: topicFeedbackRows.map(rowToTopicFeedback),
     };
   }
 
@@ -53,11 +105,12 @@ export class SQLiteEditorialMemoryStore implements EditorialMemoryStore {
     const createdAt = input.createdAt ?? new Date().toISOString();
     this.getDb().prepare(
       `INSERT OR REPLACE INTO editorial_article_memory
-      (run_id, profile_id, title, thesis, keywords_json, topic_titles_json, source_urls_json, quality_score, publish_status, dry_run, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (run_id, profile_id, account_id, title, thesis, keywords_json, topic_titles_json, source_urls_json, quality_score, publish_status, dry_run, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       input.runId,
       input.profileId ?? null,
+      input.accountId ?? null,
       input.title,
       input.thesis ?? null,
       JSON.stringify(input.keywords),
@@ -128,11 +181,12 @@ export class SQLiteEditorialMemoryStore implements EditorialMemoryStore {
     const updatedAt = input.updatedAt ?? timestamp;
     this.getDb().prepare(
       `INSERT OR REPLACE INTO editorial_run_feedback
-      (run_id, profile_id, rating, note, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      (run_id, profile_id, account_id, rating, note, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       input.runId,
       input.profileId ?? existing?.profileId ?? null,
+      input.accountId ?? existing?.accountId ?? null,
       input.rating,
       input.note?.trim() || null,
       createdAt,
@@ -149,21 +203,131 @@ export class SQLiteEditorialMemoryStore implements EditorialMemoryStore {
     return true;
   }
 
+  async listTopicFeedback(options: {
+    runId?: string;
+    profileId?: string;
+    accountId?: string;
+    strictAccount?: boolean;
+    limit?: number;
+  } = {}): Promise<EditorialTopicFeedback[]> {
+    return this.listTopicFeedbackRows(options).map(rowToTopicFeedback);
+  }
+
+  async saveTopicFeedback(
+    input: EditorialTopicFeedbackInput,
+  ): Promise<EditorialTopicFeedback> {
+    const existing = this.getTopicFeedback(input.runId, input.topicId);
+    const timestamp = new Date().toISOString();
+    const createdAt = input.createdAt ?? existing?.createdAt ?? timestamp;
+    const updatedAt = input.updatedAt ?? timestamp;
+    this.getDb().prepare(
+      `INSERT OR REPLACE INTO editorial_topic_feedback
+      (run_id, topic_id, profile_id, account_id, action, title, reason, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.runId,
+      input.topicId,
+      input.profileId ?? existing?.profileId ?? null,
+      input.accountId ?? existing?.accountId ?? null,
+      input.action,
+      (input.title?.trim() || existing?.title) ?? null,
+      input.reason?.trim() || null,
+      createdAt,
+      updatedAt,
+    );
+    return this.getTopicFeedback(input.runId, input.topicId)!;
+  }
+
+  async deleteTopicFeedback(
+    runId: string,
+    topicId: string,
+  ): Promise<boolean> {
+    const existing = this.getTopicFeedback(runId, topicId);
+    if (!existing) return false;
+    this.getDb().prepare(
+      "DELETE FROM editorial_topic_feedback WHERE run_id = ? AND topic_id = ?",
+    ).run(runId, topicId);
+    return true;
+  }
+
   private getDb(): Database {
     if (!this.db) {
       if (this.databasePath !== ":memory:") {
         Deno.mkdirSync(dirname(this.databasePath), { recursive: true });
       }
       this.db = new Database(this.databasePath);
+      ensureRunColumns(this.db);
+      ensureAccountColumns(this.db);
       this.db.exec(ARTICLE_WORKFLOW_SCHEMA_SQL);
+      ensureRunColumns(this.db);
+      ensureAccountColumns(this.db);
     }
     return this.db;
+  }
+
+  private getTopicFeedback(
+    runId: string,
+    topicId: string,
+  ): EditorialTopicFeedback | null {
+    const row = this.getDb().prepare(
+      "SELECT * FROM editorial_topic_feedback WHERE run_id = ? AND topic_id = ?",
+    ).get(runId, topicId) as TopicFeedbackRow | undefined;
+    return row ? rowToTopicFeedback(row) : null;
+  }
+
+  private listTopicFeedbackRows(options: {
+    runId?: string;
+    profileId?: string;
+    accountId?: string;
+    strictAccount?: boolean;
+    limit?: number;
+  }): TopicFeedbackRow[] {
+    const db = this.getDb();
+    const limit = options.limit ?? 30;
+    if (options.runId) {
+      return db.prepare(
+        "SELECT * FROM editorial_topic_feedback WHERE run_id = ? ORDER BY updated_at DESC LIMIT ?",
+      ).all(options.runId, limit) as TopicFeedbackRow[];
+    }
+    if (options.accountId && options.strictAccount) {
+      if (options.accountId === "default") {
+        return db.prepare(
+          `SELECT * FROM editorial_topic_feedback
+          WHERE account_id = ? OR account_id IS NULL
+          ORDER BY updated_at DESC
+          LIMIT ?`,
+        ).all(options.accountId, limit) as TopicFeedbackRow[];
+      }
+      return db.prepare(
+        `SELECT * FROM editorial_topic_feedback
+        WHERE account_id = ?
+        ORDER BY updated_at DESC
+        LIMIT ?`,
+      ).all(options.accountId, limit) as TopicFeedbackRow[];
+    }
+    if (options.accountId) {
+      return db.prepare(
+        `SELECT * FROM editorial_topic_feedback
+        WHERE account_id = ? OR account_id IS NULL
+        ORDER BY CASE WHEN account_id = ? THEN 0 ELSE 1 END, updated_at DESC
+        LIMIT ?`,
+      ).all(options.accountId, options.accountId, limit) as TopicFeedbackRow[];
+    }
+    if (options.profileId) {
+      return db.prepare(
+        "SELECT * FROM editorial_topic_feedback WHERE profile_id = ? OR profile_id IS NULL ORDER BY updated_at DESC LIMIT ?",
+      ).all(options.profileId, limit) as TopicFeedbackRow[];
+    }
+    return db.prepare(
+      "SELECT * FROM editorial_topic_feedback ORDER BY updated_at DESC LIMIT ?",
+    ).all(limit) as TopicFeedbackRow[];
   }
 }
 
 interface ArticleMemoryRow {
   run_id: string;
   profile_id: string | null;
+  account_id: string | null;
   title: string;
   thesis: string | null;
   keywords_json: string;
@@ -193,8 +357,21 @@ interface SourcePerformanceRow {
 interface FeedbackRow {
   run_id: string;
   profile_id: string | null;
+  account_id: string | null;
   rating: "good" | "ok" | "bad";
   note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface TopicFeedbackRow {
+  run_id: string;
+  topic_id: string;
+  profile_id: string | null;
+  account_id: string | null;
+  action: "lead" | "adopt" | "skip";
+  title: string | null;
+  reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -203,6 +380,7 @@ function rowToArticleMemory(row: ArticleMemoryRow): EditorialArticleMemory {
   return {
     runId: row.run_id,
     profileId: row.profile_id ?? undefined,
+    accountId: row.account_id ?? undefined,
     title: row.title,
     thesis: row.thesis ?? undefined,
     keywords: parseStringArray(row.keywords_json),
@@ -238,11 +416,74 @@ function rowToFeedback(row: FeedbackRow): EditorialRunFeedback {
   return {
     runId: row.run_id,
     profileId: row.profile_id ?? undefined,
+    accountId: row.account_id ?? undefined,
     rating: row.rating,
     note: row.note ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function rowToTopicFeedback(row: TopicFeedbackRow): EditorialTopicFeedback {
+  return {
+    runId: row.run_id,
+    topicId: row.topic_id,
+    profileId: row.profile_id ?? undefined,
+    accountId: row.account_id ?? undefined,
+    action: row.action,
+    title: row.title ?? undefined,
+    reason: row.reason ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function ensureRunColumns(db: Database): void {
+  for (
+    const statement of [
+      "ALTER TABLE article_runs ADD COLUMN run_kind TEXT NOT NULL DEFAULT 'single'",
+      "ALTER TABLE article_runs ADD COLUMN parent_run_id TEXT",
+      "ALTER TABLE article_runs ADD COLUMN account_id TEXT",
+      "ALTER TABLE article_runs ADD COLUMN profile_id TEXT",
+      "CREATE INDEX IF NOT EXISTS idx_article_runs_parent ON article_runs(parent_run_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_article_runs_account ON article_runs(account_id, created_at DESC)",
+    ]
+  ) {
+    try {
+      db.exec(statement);
+    } catch (error) {
+      if (!isIgnorableSchemaError(error)) {
+        throw error;
+      }
+    }
+  }
+}
+
+function ensureAccountColumns(db: Database): void {
+  for (
+    const statement of [
+      "ALTER TABLE editorial_article_memory ADD COLUMN account_id TEXT",
+      "ALTER TABLE editorial_run_feedback ADD COLUMN account_id TEXT",
+      "CREATE INDEX IF NOT EXISTS idx_editorial_article_memory_account_created ON editorial_article_memory(account_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_editorial_run_feedback_account_updated ON editorial_run_feedback(account_id, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_editorial_topic_feedback_account_updated ON editorial_topic_feedback(account_id, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_editorial_topic_feedback_profile_updated ON editorial_topic_feedback(profile_id, updated_at DESC)",
+    ]
+  ) {
+    try {
+      db.exec(statement);
+    } catch (error) {
+      if (!isIgnorableSchemaError(error)) {
+        throw error;
+      }
+    }
+  }
+}
+
+function isIgnorableSchemaError(error: unknown): boolean {
+  const message = String(error);
+  return message.includes("duplicate column name") ||
+    message.includes("no such table");
 }
 
 function parseStringArray(value: string): string[] {

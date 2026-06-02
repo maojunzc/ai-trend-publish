@@ -78,7 +78,7 @@ export default defineConfig((runtime) => {
         apiKey: runtime.required("AI_API_KEY"),
         model: runtime.value("AI_MODEL", "deepseek-chat"),
         timeoutMs: Number(runtime.value("AI_TIMEOUT_MS", "300000")),
-        maxAttempts: Number(runtime.value("AI_MAX_ATTEMPTS", "1")),
+        maxAttempts: Number(runtime.value("AI_MAX_ATTEMPTS", "2")),
       },
       fetch: {
         firecrawl: {
@@ -213,6 +213,9 @@ export default defineConfig((runtime) => {
           enabled: false,
           embeddingProvider: "dashscope",
           vectorStore: "d1",
+        },
+        qualityGate: {
+          forcePublish: true,
         },
       },
     },

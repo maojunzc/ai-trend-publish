@@ -79,6 +79,7 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
           enabled: true,
           minScore: 85,
           blockOnHighFactIssue: true,
+          forcePublish: true,
           allowForcePublish: false,
           maxRevisionRounds: 2,
         },
@@ -121,6 +122,7 @@ Deno.test("resolveTrendPublishConfig returns typed resolved config", () => {
   assertEquals(config.features.article.sourceLimits.maxItemsPerSource, 12);
   assertEquals(config.features.article.qualityGate.enabled, true);
   assertEquals(config.features.article.qualityGate.minScore, 85);
+  assertEquals(config.features.article.qualityGate.forcePublish, true);
   assertEquals(config.features.article.qualityGate.allowForcePublish, false);
   assertEquals(config.features.article.qualityGate.maxRevisionRounds, 2);
   assertEquals(config.storage.vector.provider, "sqlite");
@@ -198,6 +200,7 @@ Deno.test("resolveTrendPublishConfig uses feature defaults without provider enab
   assertEquals(config.features.article.qualityGate.enabled, true);
   assertEquals(config.features.article.qualityGate.minScore, 80);
   assertEquals(config.features.article.qualityGate.blockOnHighFactIssue, true);
+  assertEquals(config.features.article.qualityGate.forcePublish, false);
   assertEquals(config.features.article.qualityGate.allowForcePublish, true);
   assertEquals(config.features.article.qualityGate.maxRevisionRounds, 1);
   assertEquals(config.features.article.sourceLimits.maxAgeDays, 14);

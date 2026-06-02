@@ -160,3 +160,28 @@ Deno.test("normalizeQualityReview blocks high fact issues", () => {
   assertEquals(review.recommendedAction, "block");
   assertEquals(review.allowPublish, false);
 });
+
+Deno.test("normalizeQualityReview synthesizes issue when action requires revision", () => {
+  const review = normalizeQualityReview({
+    overallScore: 72,
+    allowPublish: false,
+    recommendedAction: "revise",
+    summary: "事实一致性不足，但模型没有返回 issues。",
+    dimensionScores: {
+      factConsistency: 62,
+      titleQuality: 78,
+      structureQuality: 88,
+      expressionQuality: 78,
+      htmlCompliance: 85,
+      imageRelevance: 100,
+      riskHandling: 72,
+    },
+    issues: [],
+    repairSuggestions: ["把未被来源支持的付费 API 表述改成开放状态待确认。"],
+  }, false);
+
+  assertEquals(review.issues.length, 1);
+  assertEquals(review.issues[0].category, "fact");
+  assertEquals(review.issues[0].autoFixable, true);
+  assertEquals(review.recommendedAction, "revise");
+});

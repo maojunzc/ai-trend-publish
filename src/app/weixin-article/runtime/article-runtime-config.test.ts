@@ -10,7 +10,9 @@ import {
   DEFAULT_LLM_CAPABILITY_ID,
 } from "@src/app/weixin-article/runtime/article-runtime-config.ts";
 import {
+  createArticleRuntimeProfile,
   getArticleRuntimeProfileDetail,
+  parseSourcesForRuntime,
   resolveArticleRuntimeConfig,
   saveArticleProfileConfig,
   seedArticleRuntimeConfig,
@@ -216,6 +218,128 @@ Deno.test("runtime config resolves weixin account defaults without mutating arti
   assertEquals(unchanged.article.count, 5);
 });
 
+Deno.test("runtime config uses account default article profile when no profile is forced", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+  const defaultDetail = await getArticleRuntimeProfileDetail(store, config);
+  const accountProfile = await createArticleRuntimeProfile(store, config, {
+    name: "实验室专用方案",
+    copyFromProfileId: defaultDetail.profile.id,
+  });
+  await saveArticleProfileConfig(store, config, accountProfile.profile.id, {
+    count: 2,
+    renderer: {
+      ...accountProfile.article.renderer,
+      template: "minimal",
+    },
+  });
+
+  await store.saveWeixinAccountProfile({
+    id: "lab",
+    name: "实验室账号",
+    enabled: true,
+    defaultArticleProfileId: accountProfile.profile.id,
+    brand: {
+      positioning: "面向工程团队",
+    },
+    defaults: {},
+  });
+
+  const accountDefault = await resolveArticleRuntimeConfig(
+    store,
+    config,
+    undefined,
+    "lab",
+  );
+  const forcedDefault = await resolveArticleRuntimeConfig(
+    store,
+    config,
+    defaultDetail.profile.id,
+    "lab",
+  );
+
+  assertEquals(accountDefault.profile.id, accountProfile.profile.id);
+  assertEquals(accountDefault.config.features.article.count, 2);
+  assertEquals(
+    accountDefault.config.features.article.renderer.template,
+    "minimal",
+  );
+  assertEquals(forcedDefault.profile.id, defaultDetail.profile.id);
+  assertEquals(forcedDefault.config.features.article.count, 5);
+});
+
+Deno.test("runtime config filters sources by account source groups", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+  const detail = await getArticleRuntimeProfileDetail(store, config);
+  await store.replaceArticleSources(
+    detail.profile.id,
+    parseSourcesForRuntime([
+      "https://example.com/default",
+      "web:https://example.com/web",
+    ]),
+  );
+  await store.saveWeixinAccountProfile({
+    id: "web-only",
+    name: "网页精选号",
+    enabled: true,
+    defaultArticleProfileId: detail.profile.id,
+    brand: {},
+    defaults: {
+      sourceGroupIds: ["web"],
+    },
+  });
+
+  const resolved = await resolveArticleRuntimeConfig(
+    store,
+    config,
+    undefined,
+    "web-only",
+  );
+
+  assertEquals(resolved.config.features.article.sources, [
+    "web:https://example.com/web",
+    "web:https://example.com",
+  ]);
+  assertEquals(
+    (resolved.snapshot.sources as Array<{ group: string }>).map((item) =>
+      item.group
+    ),
+    ["web", "web"],
+  );
+});
+
+Deno.test("runtime config rejects account source groups without enabled sources", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+  const detail = await getArticleRuntimeProfileDetail(store, config);
+  await store.saveWeixinAccountProfile({
+    id: "missing-source-group",
+    name: "缺来源账号",
+    enabled: true,
+    defaultArticleProfileId: detail.profile.id,
+    brand: {},
+    defaults: {
+      sourceGroupIds: ["social"],
+    },
+  });
+
+  await assertRejects(
+    () =>
+      resolveArticleRuntimeConfig(
+        store,
+        config,
+        undefined,
+        "missing-source-group",
+      ),
+    Error,
+    "数据源分组没有可用来源",
+  );
+});
+
 Deno.test("runtime config API manages weixin account profiles", async () => {
   const store = new SQLiteRuntimeConfigStore(":memory:");
   const config = createConfig();
@@ -227,7 +351,7 @@ Deno.test("runtime config API manages weixin account profiles", async () => {
       name: "主账号",
       enabled: true,
       brand: { positioning: "AI 新闻精选" },
-      defaults: { count: 4 },
+      defaults: { count: 4, sourceGroupIds: ["web"] },
     }, "POST"),
     "/api/config/weixin/accounts",
     store,
@@ -246,6 +370,7 @@ Deno.test("runtime config API manages weixin account profiles", async () => {
   const patched = await patchResponse.json();
   assertEquals(patched.account.name, "主账号 Pro");
   assertEquals(patched.account.brand.positioning, "AI 新闻精选");
+  assertEquals(patched.account.defaults.sourceGroupIds, ["web"]);
 
   const deleteResponse = await handleRuntimeConfigApi(
     jsonRequest({}, "DELETE"),
@@ -256,6 +381,49 @@ Deno.test("runtime config API manages weixin account profiles", async () => {
   assert(deleteResponse);
   const deleted = await deleteResponse.json();
   assertEquals(deleted.deleted, true);
+});
+
+Deno.test("runtime config API persists weixin relay check status on account ops", async () => {
+  const store = new SQLiteRuntimeConfigStore(":memory:");
+  const config = createConfig();
+  await seedArticleRuntimeConfig(store, config);
+  await store.saveWeixinAccountProfile({
+    id: "main",
+    name: "主账号",
+    enabled: true,
+    brand: {},
+    defaults: {},
+  });
+
+  const checkResponse = await handleRuntimeConfigApi(
+    jsonRequest({}, "POST"),
+    "/api/config/weixin/accounts/main/relay-check",
+    store,
+    config,
+  );
+  assert(checkResponse);
+  const checkPayload = await checkResponse.json();
+  assertEquals(checkPayload.check.status, "relay_unconfigured");
+
+  const stored = await store.getWeixinAccountProfile("main");
+  assertEquals(stored?.ops?.relayCheck?.status, "relay_unconfigured");
+
+  const getResponse = await handleRuntimeConfigApi(
+    jsonRequest({}, "GET"),
+    "/api/config/weixin/accounts/main",
+    store,
+    config,
+  );
+  assert(getResponse);
+  const getPayload = await getResponse.json();
+  assertEquals(
+    getPayload.account.relay.lastCheck.status,
+    "relay_unconfigured",
+  );
+  assertEquals(
+    getPayload.account.relay.lastCheckedAt,
+    checkPayload.check.checkedAt,
+  );
 });
 
 Deno.test("runtime config migrates legacy DashScope cover model", async () => {
@@ -484,6 +652,13 @@ Deno.test("runtime config API rejects unknown capability reference", async () =>
 });
 
 function jsonRequest(body: unknown, method: string): Request {
+  if (method === "GET" || method === "HEAD") {
+    return new Request("http://localhost/api/config", {
+      method,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   return new Request("http://localhost/api/config", {
     method,
     headers: { "Content-Type": "application/json" },

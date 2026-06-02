@@ -34,6 +34,7 @@ const TEST_FILES = [
   "src/features/weixin-article/domain/article-source.test.ts",
   "src/app/weixin-article/fetch/article-fetch-planner.test.ts",
   "src/app/weixin-article/fetch/article-fetch-router.test.ts",
+  "src/app/weixin-article/local-matrix-runner.test.ts",
   "src/app/weixin-article/runtime/article-runtime-config.test.ts",
   "src/registry/provider-registry.test.ts",
   "src/core/workflow/local-workflow-runtime.test.ts",

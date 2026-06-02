@@ -41,6 +41,7 @@ export interface DashboardConfigSummary {
       enabled: boolean;
       minScore: number;
       blockOnHighFactIssue: boolean;
+      forcePublish: boolean;
       allowForcePublish: boolean;
       maxRevisionRounds: number;
     };
@@ -102,6 +103,7 @@ export function createDashboardConfigSummary(
         enabled: article.qualityGate.enabled,
         minScore: article.qualityGate.minScore,
         blockOnHighFactIssue: article.qualityGate.blockOnHighFactIssue,
+        forcePublish: article.qualityGate.forcePublish,
         allowForcePublish: article.qualityGate.allowForcePublish,
         maxRevisionRounds: article.qualityGate.maxRevisionRounds,
       },

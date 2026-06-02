@@ -17,6 +17,7 @@ import { isArticlePlanFormat } from "@src/prompts/article-plan.prompt.ts";
 import type { PromptProfileName } from "@src/prompts/prompt-profile.ts";
 import { createStructuredJsonCompletion } from "@src/utils/llm-structured-output.ts";
 import { Logger } from "@zilla/logger";
+import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
 
 const logger = new Logger("weixin-editorial-decision-service");
 
@@ -38,6 +39,7 @@ export class WeixinArticleEditorialDecisionService {
   constructor(
     private readonly llm: LLMProvider,
     private readonly promptProfile?: PromptProfileName,
+    private readonly accountBrand?: JsonObject,
   ) {}
 
   async createEditorialDecision(
@@ -53,7 +55,10 @@ export class WeixinArticleEditorialDecisionService {
       const messages = [
         {
           role: "system" as const,
-          content: getEditorialDecisionSystemPrompt(this.promptProfile),
+          content: getEditorialDecisionSystemPrompt(
+            this.promptProfile,
+            this.accountBrand,
+          ),
         },
         {
           role: "user" as const,
@@ -61,6 +66,7 @@ export class WeixinArticleEditorialDecisionService {
             topicReport,
             contents,
             memory,
+            this.accountBrand,
           ),
         },
       ];

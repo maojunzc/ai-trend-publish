@@ -84,6 +84,9 @@ function App() {
   const [error, setError] = useState("");
   const [loginError, setLoginError] = useState("");
   const [triggerOpen, setTriggerOpen] = useState(false);
+  const [triggerMode, setTriggerMode] = useState<"single" | "matrix">(
+    "single",
+  );
   const [previewArtifact, setPreviewArtifact] = useState<ArtifactRef | null>(
     null,
   );
@@ -100,6 +103,7 @@ function App() {
   const capabilities = dashboard.capabilities.data?.capabilities ?? [];
   const articleProfiles = dashboard.articleProfiles.data?.profiles ?? [];
   const accounts = dashboard.accounts.data?.accounts ?? [];
+  const accountInsights = dashboard.accountInsights.data?.insights ?? [];
   const runs = dashboard.runs.data?.runs ?? [];
   const selectedRun = dashboard.selectedRun.data?.run ?? null;
   const latestRun = runs[0];
@@ -110,6 +114,7 @@ function App() {
     dashboard.capabilities.isFetching ||
     dashboard.articleProfiles.isFetching ||
     dashboard.accounts.isFetching ||
+    dashboard.accountInsights.isFetching ||
     dashboard.runs.isFetching ||
     dashboard.selectedRun.isFetching ||
     triggerRunMutation.isPending ||
@@ -121,6 +126,7 @@ function App() {
     dashboard.capabilities.error,
     dashboard.articleProfiles.error,
     dashboard.accounts.error,
+    dashboard.accountInsights.error,
     dashboard.runs.error,
     dashboard.selectedRun.error,
   ].find(Boolean);
@@ -174,6 +180,11 @@ function App() {
     rejectApiKey,
     selectedRunId,
   ]);
+
+  const openTrigger = useCallback((mode: "single" | "matrix" = "single") => {
+    setTriggerMode(mode);
+    setTriggerOpen(true);
+  }, []);
 
   useEffect(() => {
     if (!queryError) return;
@@ -264,7 +275,7 @@ function App() {
             <Button
               size="sm"
               variant="primary"
-              onClick={() => setTriggerOpen(true)}
+              onClick={() => openTrigger("single")}
             >
               <Play className="size-3.5" />
               运行
@@ -322,8 +333,10 @@ function App() {
               health={health}
               config={config}
               latestRun={latestRun}
+              accounts={accounts}
+              profiles={articleProfiles}
               onNavigate={setActiveView}
-              onRun={() => setTriggerOpen(true)}
+              onRun={() => openTrigger("single")}
             />
           )}
 
@@ -365,6 +378,8 @@ function App() {
             <ArticleQualityWorkspace
               run={selectedRun}
               apiKey={apiKey}
+              accounts={accounts}
+              insights={accountInsights}
               onPreviewArtifact={setPreviewArtifact}
             />
           )}
@@ -373,8 +388,10 @@ function App() {
             <AccountsWorkspace
               apiKey={apiKey}
               accounts={accounts}
+              insights={accountInsights}
               profiles={articleProfiles}
               onReload={refresh}
+              onRun={() => openTrigger("matrix")}
             />
           )}
 
@@ -383,11 +400,23 @@ function App() {
               runs={runs}
               selectedRunId={selectedRunId}
               selectedRun={selectedRun}
+              allRuns={runs}
               filter={filter}
               setFilter={setFilter}
               query={query}
               setQuery={setQuery}
               onSelectRun={setSelectedRunId}
+              onRerunAccount={async (run) => {
+                const result = await triggerRunMutation.mutateAsync({
+                  accountId: run.accountId,
+                  profileId: run.profileId || selectedConfigProfileId ||
+                    undefined,
+                  dryRun: true,
+                  forcePublish: false,
+                });
+                setSelectedRunId(result.runId);
+                await refresh();
+              }}
               apiKey={apiKey}
               profileId={selectedConfigProfileId}
               onPreviewArtifact={setPreviewArtifact}
@@ -421,6 +450,7 @@ function App() {
 
       <TriggerRunDialog
         open={triggerOpen}
+        initialMode={triggerMode}
         profiles={articleProfiles}
         accounts={accounts}
         onClose={() => setTriggerOpen(false)}

@@ -40,6 +40,7 @@ export class D1RuntimeConfigStore implements RuntimeConfigStore {
     for (const statement of splitSqlStatements(RUNTIME_CONFIG_SCHEMA_SQL)) {
       await this.d1.prepare(statement).run();
     }
+    await this.ensureSchemaUpgrades();
     this.schemaReady = true;
   }
 
@@ -369,8 +370,8 @@ export class D1RuntimeConfigStore implements RuntimeConfigStore {
     const updatedAt = profile.updatedAt || timestamp;
     await this.d1.prepare(
       `INSERT OR REPLACE INTO weixin_account_profiles
-      (id, name, enabled, default_article_profile_id, brand_json, defaults_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, enabled, default_article_profile_id, brand_json, defaults_json, ops_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       profile.id,
       profile.name,
@@ -378,10 +379,16 @@ export class D1RuntimeConfigStore implements RuntimeConfigStore {
       profile.defaultArticleProfileId ?? null,
       JSON.stringify(profile.brand ?? {}),
       JSON.stringify(profile.defaults ?? {}),
+      JSON.stringify(profile.ops ?? existing?.ops ?? {}),
       createdAt,
       updatedAt,
     ).run();
-    return { ...profile, createdAt, updatedAt };
+    return {
+      ...profile,
+      ops: profile.ops ?? existing?.ops ?? {},
+      createdAt,
+      updatedAt,
+    };
   }
 
   async deleteWeixinAccountProfile(id: string): Promise<boolean> {
@@ -399,6 +406,25 @@ export class D1RuntimeConfigStore implements RuntimeConfigStore {
     ).bind(profileId).first<{ id: string }>();
     if (!row) {
       throw new Error(`功能 Profile 不存在: ${profileId}`);
+    }
+  }
+
+  private async ensureSchemaUpgrades(): Promise<void> {
+    for (
+      const statement of [
+        "ALTER TABLE weixin_account_profiles ADD COLUMN ops_json TEXT NOT NULL DEFAULT '{}'",
+      ]
+    ) {
+      try {
+        await this.d1.prepare(statement).run();
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message.toLowerCase()
+          : String(error);
+        if (!message.includes("duplicate column")) {
+          throw error;
+        }
+      }
     }
   }
 }

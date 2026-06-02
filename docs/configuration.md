@@ -117,13 +117,23 @@ features: {
 这里的 `providers.publish.weixin.accounts`
 只保存微信连接信息。账号的运营信息不放在 TS 配置里，而是进入运行时配置：
 
-- Dashboard `账号矩阵`：维护账号名称、定位、目标读者、语气、标题偏好和禁区。
+- Dashboard
+  `账号矩阵`：维护账号名称、定位、目标读者、语气、标题偏好、禁区和内容来源分组。
 - `defaultArticleProfileId`：给账号绑定默认文章方案。
-- `defaults`：允许账号覆盖模板、提示词风格和文章数量，但不会反向修改文章方案。
+- `defaults`：允许账号覆盖模板、提示词风格、文章数量和数据源分组，但不会反向修改文章方案。
 
-运行时解析优先级是：本次运行传入的 `accountId` > 文章方案里的
-`publisher.accountId` > 账号绑定的默认文章方案。解析后的账号快照会写入本次 run
-的配置 artifact，便于复盘某篇文章用了哪个账号风格。
+运行时会分别解析文章方案和账号：
+
+- 文章方案：本次运行传入的 `profileId` > 账号绑定的 `defaultArticleProfileId` /
+  `defaults.articleProfileId` > 默认文章方案。
+- 目标账号：本次运行传入的 `accountId` > 文章方案里的 `publisher.accountId`。
+- 账号覆盖项：`defaults.template`、`defaults.promptProfile`、`defaults.count` 和
+  `defaults.sourceGroupIds` 只影响当前账号的本次运行。
+
+`defaults.sourceGroupIds` 会把文章方案的数据源收窄到指定分组，例如
+`["search",
+"rss"]`。这适合让不同公众号账号消费不同来源池，从同一套系统里生成差异化内容。解析后的账号快照和最终来源列表都会写入本次
+run 的配置 artifact，便于复盘某篇文章用了哪个账号风格和哪些来源。
 
 如果是 Cloudflare Worker / Workflows 这类没有固定出口 IP 的环境，推荐发布到固定
 IP 机器上的 `weixin-relay`。新的 relay 是无账号状态的固定 IP 代理：
@@ -460,6 +470,7 @@ features: {
       enabled: true,
       minScore: 80,
       blockOnHighFactIssue: true,
+      forcePublish: false,
       allowForcePublish: true,
       maxRevisionRounds: 1,
     },
@@ -470,8 +481,10 @@ features: {
 质量门禁默认开启，并且只保护真实发布。`dryRun: true` 时仍会完整产出
 HTML、文章计划和质量审稿 artifact，方便先观察质量；`dryRun: false`
 时，如果审稿分低于 `minScore`、审稿建议不是 `publish`、存在 blocker
-或高危事实问题，会写入 `blocked` 发布结果，不会创建微信草稿。
-`maxRevisionRounds` 控制自动修复轮次，建议保持 `1`：只修 reviewer
+或高危事实问题，默认会写入 `blocked` 发布结果，不会创建微信草稿。 如果把
+`forcePublish` 配成 `true`，真实发布即使质量不达标也会继续创建微信草稿， 只记录
+warning 和质量审稿 artifact。 `maxRevisionRounds` 控制自动修复轮次，建议保持
+`1`：只修 reviewer
 指出的可安全自动修复问题，修完会复审一次，再决定最终发布结果。
 
 ### 8. 开启工作流通知

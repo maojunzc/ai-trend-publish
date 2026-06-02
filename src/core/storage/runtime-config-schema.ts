@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS weixin_account_profiles (
   default_article_profile_id TEXT,
   brand_json TEXT NOT NULL DEFAULT '{}',
   defaults_json TEXT NOT NULL DEFAULT '{}',
+  ops_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

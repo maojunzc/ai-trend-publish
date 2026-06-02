@@ -10,8 +10,10 @@ export function createLocalWeixinArticleWorkflowDefinition(): WorkflowDefinition
   WeixinArticleWorkflowInput
 > {
   return createWeixinArticleWorkflowDefinition({
-    runtimeConfigStoreFactory: async (config) =>
-      createLocalArticleRuntimeStores(config).runtimeConfigStore,
+    runtimeConfigStoreFactory: async (config, event) =>
+      createLocalArticleRuntimeStores(config, {
+        outputDir: event.payload.dryRunOutputDir,
+      }).runtimeConfigStore,
     dependencyFactory: async (config, event, runtimeConfig) =>
       await createLocalWeixinArticleDependencies(config, {
         outputDir: event.payload.dryRunOutputDir,

@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   LLMProvider,
 } from "@src/core/ports/llm.ts";
+import { ProviderError } from "@src/core/errors/provider-error.ts";
 import { parseLLMJson } from "@src/utils/llm-output.ts";
 import { Logger } from "@zilla/logger";
 
@@ -46,6 +47,12 @@ export async function createStructuredJsonCompletion<TRaw, TResult>(
       return options.normalize(raw);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+      if (isNonCorrectableProviderError(lastError)) {
+        logger.warn(
+          `[${options.label}] LLM 调用失败，停止结构纠偏并交给业务兜底: ${lastError.message}`,
+        );
+        break;
+      }
       if (attempt >= maxAttempts) {
         break;
       }
@@ -64,6 +71,15 @@ export async function createStructuredJsonCompletion<TRaw, TResult>(
   }
 
   throw lastError ?? new Error(`${options.label}结构化输出失败`);
+}
+
+function isNonCorrectableProviderError(error: Error): boolean {
+  if (!(error instanceof ProviderError)) return false;
+  return error.kind === "auth" ||
+    error.kind === "quota" ||
+    error.kind === "rate_limit" ||
+    error.kind === "network" ||
+    error.kind === "timeout";
 }
 
 function createCorrectionMessages(

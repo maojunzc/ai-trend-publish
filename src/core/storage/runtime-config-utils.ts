@@ -53,6 +53,7 @@ export interface WeixinAccountProfileRow {
   default_article_profile_id: string | null;
   brand_json: string | null;
   defaults_json: string | null;
+  ops_json?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -122,6 +123,7 @@ export function rowToWeixinAccountProfile(
     defaultArticleProfileId: row.default_article_profile_id ?? undefined,
     brand: parseJsonObject(row.brand_json),
     defaults: parseJsonObject(row.defaults_json),
+    ops: parseJsonObject(row.ops_json),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

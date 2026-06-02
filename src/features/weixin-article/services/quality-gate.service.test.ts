@@ -6,6 +6,7 @@ const baseConfig = {
   enabled: true,
   minScore: 80,
   blockOnHighFactIssue: true,
+  forcePublish: false,
   allowForcePublish: true,
 };
 
@@ -94,4 +95,20 @@ Deno.test("quality gate can be bypassed by forcePublish when allowed", () => {
   assertEquals(decision.allowed, true);
   assertEquals(decision.bypassed, true);
   assertEquals(decision.action, "bypass");
+});
+
+Deno.test("quality gate can be bypassed by config forcePublish", () => {
+  const decision = evaluateArticleQualityGate({
+    review: { ...baseReview, overallScore: 70 },
+    config: {
+      ...baseConfig,
+      forcePublish: true,
+      allowForcePublish: false,
+    },
+    dryRun: false,
+  });
+
+  assertEquals(decision.allowed, true);
+  assertEquals(decision.bypassed, true);
+  assertEquals(decision.reason.includes("配置项 forcePublish"), true);
 });

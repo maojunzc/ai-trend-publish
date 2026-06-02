@@ -155,6 +155,13 @@ export class WeixinArticleContentProcessService {
 
   private async processContent(content: ScrapedContent): Promise<void> {
     try {
+      const originalTitle = content.title;
+      const originalContent = content.content;
+      content.metadata.originalTitle ??= originalTitle;
+      content.metadata.originalContentExcerpt ??= truncateText(
+        originalContent,
+        2400,
+      );
       const summary = await this.summarizer.summarize(JSON.stringify(content));
       content.title = summary.title;
       content.content = summary.content;
@@ -196,4 +203,11 @@ export class WeixinArticleContentProcessService {
       `[正文深抓] ${content.url} 使用 ${result.provider} 补全文: ${result.originalContentLength} -> ${result.hydratedContentLength}`,
     );
   }
+}
+
+function truncateText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength)}...`
+    : normalized;
 }

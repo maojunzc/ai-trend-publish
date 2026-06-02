@@ -234,25 +234,61 @@ export class KvD1RunStateStore implements RunStateStore {
 
   private async ensureSchema(): Promise<void> {
     if (this.schemaReady) return;
+    await this.ensureRunColumns();
+    await this.ensureEditorialAccountColumns();
     for (const statement of splitSqlStatements(ARTICLE_WORKFLOW_SCHEMA_SQL)) {
       await this.d1.prepare(statement).run();
     }
+    await this.ensureRunColumns();
+    await this.ensureEditorialAccountColumns();
+    this.schemaReady = true;
+  }
+
+  private async ensureRunColumns(): Promise<void> {
     for (
       const statement of [
         "ALTER TABLE article_runs ADD COLUMN run_kind TEXT NOT NULL DEFAULT 'single'",
         "ALTER TABLE article_runs ADD COLUMN parent_run_id TEXT",
         "ALTER TABLE article_runs ADD COLUMN account_id TEXT",
         "ALTER TABLE article_runs ADD COLUMN profile_id TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_article_runs_parent ON article_runs(parent_run_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_article_runs_account ON article_runs(account_id, created_at DESC)",
       ]
     ) {
       try {
         await this.d1.prepare(statement).run();
-      } catch {
-        // Existing deployments may already have the column.
+      } catch (error) {
+        if (!isIgnorableSchemaError(error)) {
+          throw error;
+        }
       }
     }
-    this.schemaReady = true;
   }
+
+  private async ensureEditorialAccountColumns(): Promise<void> {
+    for (
+      const statement of [
+        "ALTER TABLE editorial_article_memory ADD COLUMN account_id TEXT",
+        "ALTER TABLE editorial_run_feedback ADD COLUMN account_id TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_editorial_article_memory_account_created ON editorial_article_memory(account_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_editorial_run_feedback_account_updated ON editorial_run_feedback(account_id, updated_at DESC)",
+      ]
+    ) {
+      try {
+        await this.d1.prepare(statement).run();
+      } catch (error) {
+        if (!isIgnorableSchemaError(error)) {
+          throw error;
+        }
+      }
+    }
+  }
+}
+
+function isIgnorableSchemaError(error: unknown): boolean {
+  const message = String(error);
+  return message.includes("duplicate column name") ||
+    message.includes("no such table");
 }
 
 interface RunRow {

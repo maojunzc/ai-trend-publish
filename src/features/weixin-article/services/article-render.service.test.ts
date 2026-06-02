@@ -56,7 +56,7 @@ Deno.test("toTemplateData falls back to empty keywords when metadata is not an a
   assertEquals(result[0].keywords, []);
 });
 
-Deno.test("toTemplateData follows article plan article order and filters unrelated content", () => {
+Deno.test("toTemplateData renders planned sections for brief formats too", () => {
   const service = new WeixinArticleRenderService(fakeRenderer());
   const result = service.toTemplateData(
     [
@@ -65,7 +65,7 @@ Deno.test("toTemplateData follows article plan article order and filters unrelat
       content("support", "补充文章"),
     ],
     {
-      format: "product-review",
+      format: "daily-brief",
       thesis: "主线观点",
       targetReader: "读者",
       summary: "摘要",
@@ -93,7 +93,66 @@ Deno.test("toTemplateData follows article plan article order and filters unrelat
     } satisfies ArticlePlan,
   );
 
-  assertEquals(result.map((item) => item.id), ["lead", "support"]);
+  assertEquals(result.map((item) => item.id), ["section-1"]);
+  assertEquals(result[0].title, "主线");
+  assertEquals(result[0].metadata.sourceArticleIds, [
+    "lead",
+    "support",
+    "lead",
+  ]);
+  assertEquals(result[0].content.includes("可引用来源要点：主线文章"), true);
+});
+
+Deno.test("toTemplateData renders planned sections for analysis formats", () => {
+  const service = new WeixinArticleRenderService(fakeRenderer());
+  const result = service.toTemplateData(
+    [
+      content("lead", "来源文章"),
+    ],
+    {
+      format: "product-review",
+      thesis: "主线观点",
+      targetReader: "读者",
+      summary: "摘要",
+      sections: [
+        {
+          id: "section-1",
+          title: "工程规格",
+          intent: "解释工程规格",
+          angle: "按计划章节展开",
+          articleIds: ["lead"],
+          keyPoints: ["必须说明限制", "避免只复述新闻稿"],
+        },
+        {
+          id: "section-2",
+          title: "落地边界",
+          intent: "说明边界",
+          angle: "给出使用判断",
+          articleIds: ["lead"],
+          keyPoints: ["适用场景", "不适用场景"],
+        },
+      ],
+      titleDirections: [],
+      coverDirection: {
+        visualBrief: "封面",
+        textBrief: "封面文案",
+        mood: "克制",
+      },
+      bodyImagePlan: {
+        enabled: false,
+        placements: [],
+      },
+      riskNotes: [],
+      generatedAt: "2026-05-24T00:00:00.000Z",
+      fallback: false,
+      sourceArticleIds: ["lead"],
+    } satisfies ArticlePlan,
+  );
+
+  assertEquals(result.map((item) => item.id), ["section-1", "section-2"]);
+  assertEquals(result[0].title, "工程规格");
+  assertEquals(result[0].metadata.articlePlanFormat, "product-review");
+  assertEquals(result[0].content.includes("必须说明限制"), true);
 });
 
 function content(id: string, title: string) {

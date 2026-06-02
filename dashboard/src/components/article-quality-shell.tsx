@@ -1,7 +1,18 @@
 import { type ReactNode, useState } from "react";
-import { ListChecks, Newspaper, Route, ShieldCheck } from "lucide-react";
+import {
+  BrainCircuit,
+  ListChecks,
+  Newspaper,
+  Route,
+  ShieldCheck,
+} from "lucide-react";
 
-export type ArticleQualityTab = "review" | "topics" | "decision" | "plan";
+export type ArticleQualityTab =
+  | "learning"
+  | "review"
+  | "topics"
+  | "decision"
+  | "plan";
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -23,19 +34,29 @@ function statusTone(status?: string) {
 export function ArticleQualityShell(
   {
     runStatus,
+    accountId,
+    profileId,
     renderTab,
   }: {
     runStatus?: string;
+    accountId?: string;
+    profileId?: string;
     renderTab: (tab: ArticleQualityTab) => ReactNode;
   },
 ) {
-  const [activeTab, setActiveTab] = useState<ArticleQualityTab>("review");
+  const [activeTab, setActiveTab] = useState<ArticleQualityTab>("learning");
   const tabs: Array<{
     id: ArticleQualityTab;
     label: string;
     description: string;
     icon: ReactNode;
   }> = [
+    {
+      id: "learning",
+      label: "学习",
+      description: "账号画像、反馈和本次应用规则",
+      icon: <BrainCircuit className="size-4" />,
+    },
     {
       id: "review",
       label: "审稿",
@@ -45,7 +66,7 @@ export function ArticleQualityShell(
     {
       id: "topics",
       label: "选题",
-      description: "主题聚类和候选主线",
+      description: "候选主题、账号适配和编辑取舍",
       icon: <Newspaper className="size-4" />,
     },
     {
@@ -74,21 +95,33 @@ export function ArticleQualityShell(
               </h2>
             </div>
             <p className="tp-muted text-sm leading-6">
-              默认先看审稿结果；需要追溯原因时，再查看选题、编辑决策和文章计划。
+              先看账号学习依据，再追溯审稿、选题、编辑决策和文章计划。
               这里展示的是同一次运行的产物，不影响已经生成的草稿。
             </p>
           </div>
-          <span
-            className={cx(
-              "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium",
-              statusTone(runStatus),
+          <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+            {accountId && (
+              <span className="inline-flex h-7 items-center rounded-full border border-[#e2e8f0] bg-white px-2.5 text-xs font-medium text-[#334155]">
+                账号 {accountId}
+              </span>
             )}
-          >
-            {runStatus ?? "no run"}
-          </span>
+            {profileId && (
+              <span className="inline-flex h-7 items-center rounded-full border border-[#e2e8f0] bg-white px-2.5 text-xs font-medium text-[#334155]">
+                方案 {profileId}
+              </span>
+            )}
+            <span
+              className={cx(
+                "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium",
+                statusTone(runStatus),
+              )}
+            >
+              {runStatus ?? "no run"}
+            </span>
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-2 md:grid-cols-4">
+        <div className="mt-4 grid gap-2 md:grid-cols-5">
           {tabs.map((tab) => (
             <button
               key={tab.id}

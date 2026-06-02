@@ -100,6 +100,8 @@ export function getEditorialTopicUserPrompt(
 - title 要像编辑选题标题，不要照抄营销标题。
 - title 不要写成“AI速递”“今日快报”“行业观察”这类栏目名，要体现主题的新鲜点。
 - 如果近期文章记忆中出现过相同主题或相同角度，应降低 saturation、避免重复主线；除非今天有明确新事实。
+- 人工反馈优先级高于一般偏好：近期“跳过”的相似主题必须降为 skip；近期“锁主线/采用”的相似主题只能在当前候选有充分证据时提高优先级，不能替代事实证据。
+- 近期差评说明是强规避项；如果差评指出标题空泛、缺少读者收益、AI 味重或重复角度，本次选题理由必须主动避开这些问题。
 - 来源表现只作为输入质量参考，不要把来源统计当作文章事实写进正文。
 
 ${formatEditorialMemory(memory)}
@@ -123,7 +125,8 @@ ${
 function formatEditorialMemory(memory?: EditorialMemoryContext): string {
   if (
     !memory ||
-    (!memory.recentArticles.length && !memory.sourcePerformance.length)
+    (!memory.recentArticles.length && !memory.sourcePerformance.length &&
+      !memory.recentTopicFeedback.length)
   ) {
     return "近期编辑记忆：暂无。";
   }
@@ -133,7 +136,8 @@ function formatEditorialMemory(memory?: EditorialMemoryContext): string {
       ? "未知"
       : String(article.qualityScore);
     const keywords = article.keywords.slice(0, 6).join("、") || "无";
-    return `${index + 1}. ${article.title} | 主线: ${
+    const account = article.accountId ? ` | 账号: ${article.accountId}` : "";
+    return `${index + 1}. ${article.title}${account} | 主线: ${
       article.thesis || "未记录"
     } | 关键词: ${keywords} | 质量分: ${score} | 状态: ${article.publishStatus}`;
   }).join("\n");
@@ -153,7 +157,24 @@ function formatEditorialMemory(memory?: EditorialMemoryContext): string {
       : item.rating === "bad"
       ? "差"
       : "一般";
-    return `${index + 1}. ${label}: ${item.note || "未填写原因"}`;
+    const account = item.accountId ? `账号 ${item.accountId}，` : "";
+    return `${index + 1}. ${account}${label}: ${item.note || "未填写原因"}`;
+  }).join("\n");
+
+  const topicFeedback = memory.recentTopicFeedback.slice(0, 10).map((
+    item,
+    index,
+  ) => {
+    const action = item.action === "lead"
+      ? "锁主线"
+      : item.action === "adopt"
+      ? "采用"
+      : "跳过";
+    const account = item.accountId ? `账号 ${item.accountId}，` : "";
+    const title = item.title || item.topicId;
+    return `${index + 1}. ${account}${action}: ${title}${
+      item.reason ? `，原因：${item.reason}` : ""
+    }`;
   }).join("\n");
 
   return `近期编辑记忆：
@@ -161,6 +182,9 @@ ${recent || "暂无历史文章。"}
 
 人工反馈：
 ${feedback || "暂无人工反馈。"}
+
+主题人工取舍：
+${topicFeedback || "暂无主题级取舍。"}
 
 来源表现摘要：
 ${sources || "暂无来源表现。"}

@@ -96,6 +96,19 @@ export interface WeixinAccountDefaultsConfig extends JsonObject {
   sourceGroupIds?: string[];
 }
 
+export interface WeixinAccountRelayCheckStatus extends JsonObject {
+  checkedAt?: string;
+  ok?: boolean;
+  status?: string;
+  message?: string;
+  relayUrl?: string;
+  appIdMasked?: string;
+}
+
+export interface WeixinAccountOpsConfig extends JsonObject {
+  relayCheck?: WeixinAccountRelayCheckStatus;
+}
+
 export interface WeixinAccountProfileInput {
   id: string;
   name: string;
@@ -103,6 +116,7 @@ export interface WeixinAccountProfileInput {
   defaultArticleProfileId?: string;
   brand: WeixinAccountBrandConfig;
   defaults: WeixinAccountDefaultsConfig;
+  ops?: WeixinAccountOpsConfig;
 }
 
 export interface WeixinAccountProfile extends WeixinAccountProfileInput {
@@ -111,6 +125,7 @@ export interface WeixinAccountProfile extends WeixinAccountProfileInput {
     defaultConfigured?: boolean;
     appIdMasked?: string;
     lastCheckedAt?: string;
+    lastCheck?: WeixinAccountRelayCheckStatus;
   };
   createdAt: string;
   updatedAt: string;

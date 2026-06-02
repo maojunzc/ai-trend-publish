@@ -7,8 +7,10 @@ import { join } from "node:path";
 
 export function createLocalArticleRuntimeStores(
   config: ResolvedTrendPublishConfig,
+  options: { outputDir?: string } = {},
 ) {
-  const outputDir = config.storage.artifacts.outputDir ||
+  const outputDir = options.outputDir ||
+    config.storage.artifacts.outputDir ||
     config.storage.runState.outputDir ||
     "src/temp";
   const baseDir = join(Deno.cwd(), outputDir);

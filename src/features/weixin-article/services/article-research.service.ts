@@ -18,6 +18,7 @@ export interface ArticleResearchConfig {
   enabled: boolean;
   maxResearchQueries: number;
   maxResultsPerQuery: number;
+  maxHydrationCandidates?: number;
   searchProviders: string[];
 }
 
@@ -45,12 +46,22 @@ export class WeixinArticleResearchService {
       normalizeLimit(this.config.maxResearchQueries, 3, 6),
     );
     const resultLimit = normalizeLimit(this.config.maxResultsPerQuery, 3, 8);
+    const maxHydrationCandidates = normalizeLimit(
+      this.config.maxHydrationCandidates ?? 3,
+      3,
+      6,
+    );
+    const globalSignals = buildResearchSignals(input, topic);
+    let hydrationAttempts = 0;
     const items: EvidenceItem[] = [];
     const gaps: string[] = [];
     const seenUrls = new Set<string>();
 
     for (const query of queries) {
       const failures: ArticleContentFetchFailure[] = [];
+      const querySignals = [
+        ...new Set([...globalSignals, ...tokenizeResearchSignal(query)]),
+      ];
       try {
         const result = await this.contentFetcher.scrape(
           {
@@ -64,17 +75,32 @@ export class WeixinArticleResearchService {
             failures.push(failure);
           },
         );
-        const candidates = result.contents.slice(0, resultLimit);
+        const candidates = result.contents
+          .filter((candidate) => isUsableEvidenceCandidate(candidate))
+          .filter((candidate) =>
+            isRelevantEvidenceCandidate(candidate, querySignals)
+          )
+          .slice(0, resultLimit);
         if (!candidates.length) {
-          gaps.push(`搜索无结果: ${query}`);
+          gaps.push(`搜索无相关结果: ${query}`);
           continue;
         }
 
         for (const candidate of candidates) {
-          const hydrated = await this.hydrateCandidate(candidate);
-          if (seenUrls.has(hydrated.url)) continue;
-          seenUrls.add(hydrated.url);
-          items.push(this.toEvidenceItem(hydrated, query));
+          if (seenUrls.has(candidate.url)) continue;
+          seenUrls.add(candidate.url);
+
+          const shouldHydrate = hydrationAttempts < maxHydrationCandidates &&
+            shouldHydrateEvidenceCandidate(candidate);
+          const evidenceContent = shouldHydrate
+            ? await this.hydrateCandidate(candidate)
+            : candidate;
+          if (shouldHydrate) hydrationAttempts += 1;
+          if (!isRelevantEvidenceCandidate(evidenceContent, querySignals)) {
+            gaps.push(`搜索结果深抓后相关性不足: ${evidenceContent.url}`);
+            continue;
+          }
+          items.push(this.toEvidenceItem(evidenceContent, querySignals));
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -116,12 +142,10 @@ export class WeixinArticleResearchService {
         ),
       ),
     ].slice(0, 3);
+    const leadTopicTitle = input.editorialDecision.leadTopicTitle;
     const values = [
-      ...input.contents.slice(0, 3).map((content) =>
-        `${content.title} ${sourceHosts[0] ?? ""}`
-      ),
-      input.editorialDecision.leadTopicTitle,
-      `${input.editorialDecision.leadTopicTitle} ${
+      leadTopicTitle,
+      `${leadTopicTitle} ${
         sourceHosts.length ? sourceHosts.join(" ") : "official announcement"
       }`,
       ...input.editorialDecision.selectedTopics.map((topic) =>
@@ -131,6 +155,9 @@ export class WeixinArticleResearchService {
         cluster.title,
         cluster.keywords.slice(0, 3).join(" "),
       ]),
+      ...input.contents.slice(0, 3).map((content) =>
+        `${content.title} ${sourceHosts[0] ?? ""}`
+      ),
     ];
 
     const seen = new Set<string>();
@@ -166,10 +193,14 @@ export class WeixinArticleResearchService {
     }
   }
 
-  private toEvidenceItem(content: ScrapedContent, query: string): EvidenceItem {
-    const sourceType = inferSourceType(content.url);
+  private toEvidenceItem(
+    content: ScrapedContent,
+    querySignals: string[],
+  ): EvidenceItem {
+    const sourceType = inferSourceType(content.url, querySignals);
+    const supportSignals = findMatchedSignals(content, querySignals);
     return {
-      id: `ev_${stableHash(`${query}:${content.url}`)}`,
+      id: `ev_${stableHash(`${querySignals.join(" ")}:${content.url}`)}`,
       title: content.title || content.url,
       url: content.url,
       provider: String(
@@ -177,7 +208,9 @@ export class WeixinArticleResearchService {
       ),
       sourceType,
       summary: normalizeSummary(content.content),
-      supports: [query],
+      supports: supportSignals.length
+        ? supportSignals.slice(0, 8)
+        : ["与本次选题存在弱相关，需人工复核"],
       confidence: inferConfidence(sourceType),
     };
   }
@@ -197,9 +230,17 @@ function createEmptyEvidencePack(
   };
 }
 
-function inferSourceType(url: string): EvidenceSourceType {
+function inferSourceType(
+  url: string,
+  querySignals: string[] = [],
+): EvidenceSourceType {
   const host = readHost(url);
   if (!host) return "background";
+  if (
+    host.includes("github.com") && !isFirstPartyGithubUrl(url, querySignals)
+  ) {
+    return "community";
+  }
   if (
     host.endsWith(".gov") ||
     host.endsWith(".edu") ||
@@ -253,6 +294,9 @@ function inferConfidence(sourceType: EvidenceSourceType): EvidenceItem[
 function filterEvidenceItems(items: EvidenceItem[]): EvidenceItem[] {
   return items.filter((item) => {
     if (item.summary.trim().length < 120) return false;
+    if (item.supports.length === 1 && item.supports[0].includes("弱相关")) {
+      return false;
+    }
     if (item.confidence === "low" && item.sourceType === "background") {
       return false;
     }
@@ -260,8 +304,140 @@ function filterEvidenceItems(items: EvidenceItem[]): EvidenceItem[] {
   });
 }
 
+function isUsableEvidenceCandidate(content: ScrapedContent): boolean {
+  const host = readHost(content.url);
+  if (!host) return false;
+  if (
+    noisyEvidenceHosts.some((blocked) =>
+      host === blocked || host.endsWith(`.${blocked}`)
+    )
+  ) {
+    return false;
+  }
+
+  const sourceType = inferSourceType(content.url);
+  if (sourceType !== "background") return true;
+  return normalizeSummary(content.content).length >= 500;
+}
+
+function isRelevantEvidenceCandidate(
+  content: ScrapedContent,
+  querySignals: string[],
+): boolean {
+  if (!querySignals.length) return true;
+  const matched = findMatchedSignals(content, querySignals);
+  if (matched.length >= 2) return true;
+
+  const host = readHost(content.url) ?? "";
+  const officialHostMatch = officialHostSignalRules.some((rule) =>
+    host.includes(rule.host) &&
+    rule.signals.some((signal) => querySignals.includes(signal))
+  );
+  return officialHostMatch && matched.length >= 1;
+}
+
+function findMatchedSignals(
+  content: ScrapedContent,
+  querySignals: string[],
+): string[] {
+  const textSignals = tokenizeResearchSignal(
+    `${content.title}\n${content.url}\n${content.content}`,
+  );
+  const textSet = new Set(textSignals);
+  return [...new Set(querySignals.filter((signal) => textSet.has(signal)))];
+}
+
+function shouldHydrateEvidenceCandidate(content: ScrapedContent): boolean {
+  const sourceType = inferSourceType(content.url);
+  if (sourceType === "background" || sourceType === "community") return false;
+  if (normalizeSummary(content.content).length >= 500) return false;
+  return true;
+}
+
 function normalizeSummary(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 900);
+}
+
+function buildResearchSignals(
+  input: {
+    topicReport: EditorialTopicReport;
+    editorialDecision: EditorialDecision;
+    contents: ScrapedContent[];
+  },
+  topic: string,
+): string[] {
+  const clusterById = new Map(
+    input.topicReport.clusters.map((cluster) => [cluster.id, cluster]),
+  );
+  const values = [
+    topic,
+    input.editorialDecision.leadTopicTitle,
+    input.editorialDecision.decisionSummary,
+    ...input.editorialDecision.whyThisNow,
+    ...input.editorialDecision.selectedTopics.flatMap((selected) => {
+      const cluster = clusterById.get(selected.topicId);
+      return [
+        selected.reason,
+        cluster?.title,
+        cluster?.summary,
+        ...(cluster?.keywords ?? []),
+      ];
+    }),
+    ...input.contents.slice(0, 5).flatMap((content) => [
+      content.title,
+      ...(Array.isArray(content.metadata.keywords)
+        ? content.metadata.keywords.filter((item): item is string =>
+          typeof item === "string"
+        )
+        : []),
+    ]),
+  ];
+  return [...new Set(values.flatMap(tokenizeResearchSignal))].slice(0, 80);
+}
+
+function tokenizeResearchSignal(value: string | undefined): string[] {
+  if (!value) return [];
+  const normalized = expandDomainSynonyms(value.toLowerCase());
+  const baseTokens = normalized
+    .replace(/[^\p{L}\p{N}.+-]+/gu, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const tokens = baseTokens.flatMap((token) => {
+    if (/^\p{Script=Han}+$/u.test(token)) {
+      return createCjkSignalTokens(token);
+    }
+    return [token];
+  });
+  return [
+    ...new Set(
+      tokens
+        .map((token) => token.replace(/^\.+|\.+$/g, ""))
+        .filter((token) => token.length >= 2)
+        .filter((token) => !genericResearchTokens.has(token)),
+    ),
+  ];
+}
+
+function expandDomainSynonyms(value: string): string {
+  let result = value;
+  for (const [pattern, expansion] of domainSynonyms) {
+    if (pattern.test(result)) {
+      result = `${result} ${expansion}`;
+    }
+  }
+  return result;
+}
+
+function createCjkSignalTokens(value: string): string[] {
+  if (value.length <= 4) return [value];
+  const tokens = new Set<string>();
+  for (const size of [2, 3, 4]) {
+    for (let index = 0; index <= value.length - size; index += 1) {
+      tokens.add(value.slice(index, index + size));
+    }
+  }
+  return [...tokens];
 }
 
 function readHost(value: string): string | undefined {
@@ -271,6 +447,99 @@ function readHost(value: string): string | undefined {
     return undefined;
   }
 }
+
+function isFirstPartyGithubUrl(url: string, querySignals: string[]): boolean {
+  try {
+    const pathParts = new URL(url).pathname.toLowerCase().split("/").filter(
+      Boolean,
+    );
+    const owner = pathParts[0];
+    if (!owner) return false;
+    return githubOwnerSignalRules.some((rule) =>
+      rule.owners.includes(owner) &&
+      rule.signals.some((signal) => querySignals.includes(signal))
+    );
+  } catch {
+    return false;
+  }
+}
+
+const officialHostSignalRules = [
+  { host: "openai.com", signals: ["openai", "codex", "gpt"] },
+  { host: "anthropic.com", signals: ["anthropic", "claude", "opus"] },
+  { host: "deepmind.google", signals: ["deepmind", "gemini", "gemma"] },
+  { host: "blog.google", signals: ["google", "gemini", "gemma"] },
+  { host: "microsoft.com", signals: ["microsoft", "azure"] },
+];
+
+const githubOwnerSignalRules = [
+  { owners: ["openai"], signals: ["openai", "codex", "gpt"] },
+  { owners: ["anthropics", "anthropic-ai"], signals: ["anthropic", "claude"] },
+  {
+    owners: ["google", "google-deepmind", "deepmind"],
+    signals: ["google", "gemini", "gemma"],
+  },
+  { owners: ["microsoft"], signals: ["microsoft", "azure"] },
+];
+
+const domainSynonyms: Array<[RegExp, string]> = [
+  [/前沿治理框架|治理框架/u, "frontier governance framework"],
+  [/可信第三方|第三方评估/u, "trustworthy third party evaluations"],
+  [/合规自查|安全评估/u, "safety evaluations compliance"],
+  [/税务(?:agent|智能体)|tax\s*agent/u, "tax agents"],
+  [/混合云|本地部署|企业部署/u, "hybrid on-premises enterprise environments"],
+  [/编码智能体|编程助手/u, "coding agents"],
+  [/上下文窗口/u, "context window"],
+  [/定价/u, "pricing"],
+];
+
+const genericResearchTokens = new Set([
+  "ai",
+  "api",
+  "www",
+  "com",
+  "http",
+  "https",
+  "news",
+  "blog",
+  "official",
+  "announcement",
+  "update",
+  "updates",
+  "model",
+  "models",
+  "product",
+  "products",
+  "company",
+  "companies",
+  "enterprise",
+  "enterprises",
+  "technology",
+  "technologies",
+  "agent",
+  "agents",
+  "发布",
+  "更新",
+  "官方",
+  "企业",
+  "模型",
+  "技术",
+  "产品",
+  "文章",
+  "主线",
+  "现在",
+  "可以",
+  "什么",
+  "这个",
+  "一个",
+  "几个",
+  "分析",
+  "深度",
+  "今日",
+  "本期",
+  "工程",
+  "落地",
+]);
 
 function normalizeLimit(value: number, fallback: number, max: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -284,3 +553,22 @@ function stableHash(value: string): string {
   }
   return Math.abs(result).toString(36);
 }
+
+const noisyEvidenceHosts = [
+  "zhihu.com",
+  "zhuanlan.zhihu.com",
+  "weixin.qq.com",
+  "mp.weixin.qq.com",
+  "baijiahao.baidu.com",
+  "csdn.net",
+  "juejin.cn",
+  "toutiao.com",
+  "sina.com.cn",
+  "finance.sina.com.cn",
+  "youtube.com",
+  "youtu.be",
+  "instagram.com",
+  "facebook.com",
+  "linkedin.com",
+  "bilibili.com",
+];

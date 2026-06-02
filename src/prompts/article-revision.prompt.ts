@@ -22,10 +22,10 @@ export function getArticleRevisionSystemPrompt(
 ${newsroomStyle}
 
 修稿原则：
-1. 只修复 autoFixable=true 的具体问题，不自由发挥。
+1. 只修复审稿报告里明确列入“允许修复”的问题，不自由发挥。
 2. 不新增来源文章没有的信息，不新增数据、人物、结论或链接。
 3. 不处理 high fact 或 blocker 问题；这类问题应留给人工或阻断发布。
-4. 修改越少越好，优先修标题、首屏新闻钩子、措辞、风险提示、HTML 合规和轻微结构问题。
+4. 修改越少越好，优先修标题、首屏新闻钩子、措辞、风险提示、HTML 合规和可局部调整的结构问题。
 5. 如果没有安全可修的问题，返回 applied=false，并保留原标题和原 HTML。
 6. 修掉明显 AI 味时，只压缩和改写空泛句，不把文章改成另一个选题。
 
@@ -70,11 +70,7 @@ export function getArticleRevisionUserPrompt(
 ): string {
   const profile = resolvePromptProfile(promptProfile);
   const newsroomStyle = getChineseNewsroomStyleGuide(promptProfile);
-  const safeIssues = input.qualityReview.issues.filter((issue) =>
-    issue.autoFixable &&
-    issue.severity !== "blocker" &&
-    !(issue.category === "fact" && issue.severity === "high")
-  );
+  const safeIssues = input.qualityReview.issues.filter(isSafeRevisionIssue);
   const compactContents = input.contents.map((content) => ({
     id: content.id,
     title: content.title,
@@ -119,4 +115,15 @@ ${JSON.stringify(compactContents, null, 2)}
 
 当前 HTML：
 ${input.html.slice(0, 18000)}`;
+}
+
+function isSafeRevisionIssue(
+  issue: ArticleQualityReview["issues"][number],
+): boolean {
+  if (issue.severity === "blocker") return false;
+  if (issue.autoFixable) return true;
+  return issue.category === "title" ||
+    issue.category === "tone" ||
+    issue.category === "structure" ||
+    issue.category === "html";
 }

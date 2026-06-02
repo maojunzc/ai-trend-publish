@@ -1,4 +1,5 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
+import { ProviderError } from "@src/core/errors/provider-error.ts";
 import type {
   ChatCompletionOptions,
   ChatCompletionResponse,
@@ -39,6 +40,39 @@ Deno.test("createStructuredJsonCompletion retries with correction feedback", asy
   );
 });
 
+Deno.test("createStructuredJsonCompletion does not correction-retry provider transport errors", async () => {
+  const llm = new FailingStructuredLlm(
+    new ProviderError({
+      provider: "openai-compatible",
+      kind: "network",
+      message: "network down",
+    }),
+  );
+
+  await assertRejects(
+    () =>
+      createStructuredJsonCompletion<
+        { title?: unknown },
+        { title: string }
+      >({
+        label: "测试结构化输出",
+        llm,
+        messages: [{ role: "user", content: "输出 JSON" }],
+        maxAttempts: 3,
+        baseDelayMs: 0,
+        normalize: (raw) => {
+          if (typeof raw.title !== "string") {
+            throw new Error("字段不完整");
+          }
+          return { title: raw.title };
+        },
+      }),
+    ProviderError,
+    "network down",
+  );
+  assertEquals(llm.calls.length, 1);
+});
+
 class FakeStructuredLlm implements LLMProvider {
   calls: Array<{ messages: ChatMessage[]; options?: ChatCompletionOptions }> =
     [];
@@ -68,5 +102,30 @@ class FakeStructuredLlm implements LLMProvider {
         finish_reason: "stop",
       }],
     });
+  }
+}
+
+class FailingStructuredLlm implements LLMProvider {
+  calls: Array<{ messages: ChatMessage[]; options?: ChatCompletionOptions }> =
+    [];
+
+  constructor(private readonly error: Error) {}
+
+  initialize(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  refresh(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  setModel(): void {}
+
+  createChatCompletion(
+    messages: ChatMessage[],
+    options?: ChatCompletionOptions,
+  ): Promise<ChatCompletionResponse> {
+    this.calls.push({ messages, options });
+    return Promise.reject(this.error);
   }
 }

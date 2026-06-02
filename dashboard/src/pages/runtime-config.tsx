@@ -312,6 +312,11 @@ function articleDraftFromConfig(
       ["blockOnHighFactIssue"],
       true,
     ),
+    qualityGateForcePublish: readBoolean(
+      qualityGate,
+      ["forcePublish"],
+      false,
+    ),
     qualityGateAllowForcePublish: readBoolean(
       qualityGate,
       ["allowForcePublish"],
@@ -369,6 +374,7 @@ function articlePatchFromDraft(draft: ArticleFormDraft) {
       enabled: draft.qualityGateEnabled,
       minScore: Number.isFinite(minScore) ? minScore : 80,
       blockOnHighFactIssue: draft.qualityGateBlockOnHighFactIssue,
+      forcePublish: draft.qualityGateForcePublish,
       allowForcePublish: draft.qualityGateAllowForcePublish,
       maxRevisionRounds: Number.isFinite(maxRevisionRounds)
         ? maxRevisionRounds
@@ -722,6 +728,20 @@ function TrendProfileView(
                   onChange={(event) =>
                     update(
                       "qualityGateBlockOnHighFactIssue",
+                      event.currentTarget.checked,
+                    )}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span className="tp-muted">真实发布默认强制发布</span>
+                <input
+                  className="size-4 accent-[#0f172a]"
+                  type="checkbox"
+                  checked={draft.qualityGateForcePublish}
+                  disabled={!draft.qualityGateEnabled}
+                  onChange={(event) =>
+                    update(
+                      "qualityGateForcePublish",
                       event.currentTarget.checked,
                     )}
                 />

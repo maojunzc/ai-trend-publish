@@ -352,8 +352,8 @@ export class SQLiteRuntimeConfigStore implements RuntimeConfigStore {
     const updatedAt = profile.updatedAt || timestamp;
     this.getDb().prepare(
       `INSERT OR REPLACE INTO weixin_account_profiles
-      (id, name, enabled, default_article_profile_id, brand_json, defaults_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, enabled, default_article_profile_id, brand_json, defaults_json, ops_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       profile.id,
       profile.name,
@@ -361,10 +361,16 @@ export class SQLiteRuntimeConfigStore implements RuntimeConfigStore {
       profile.defaultArticleProfileId ?? null,
       JSON.stringify(profile.brand ?? {}),
       JSON.stringify(profile.defaults ?? {}),
+      JSON.stringify(profile.ops ?? existing?.ops ?? {}),
       createdAt,
       updatedAt,
     );
-    return { ...profile, createdAt, updatedAt };
+    return {
+      ...profile,
+      ops: profile.ops ?? existing?.ops ?? {},
+      createdAt,
+      updatedAt,
+    };
   }
 
   async deleteWeixinAccountProfile(id: string): Promise<boolean> {
@@ -382,8 +388,28 @@ export class SQLiteRuntimeConfigStore implements RuntimeConfigStore {
       }
       this.db = new Database(this.databasePath);
       this.db.exec(RUNTIME_CONFIG_SCHEMA_SQL);
+      this.ensureSchemaUpgrades();
     }
     return this.db;
+  }
+
+  private ensureSchemaUpgrades(): void {
+    for (
+      const statement of [
+        "ALTER TABLE weixin_account_profiles ADD COLUMN ops_json TEXT NOT NULL DEFAULT '{}'",
+      ]
+    ) {
+      try {
+        this.db?.exec(statement);
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !error.message.toLowerCase().includes("duplicate column")
+        ) {
+          throw error;
+        }
+      }
+    }
   }
 
   private requireFeatureProfile(profileId: string): void {

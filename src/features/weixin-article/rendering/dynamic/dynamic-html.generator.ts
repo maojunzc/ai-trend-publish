@@ -10,6 +10,7 @@ import { PromptProfileName } from "@src/prompts/prompt-profile.ts";
 import type { WeixinArticleRenderContext } from "@src/features/weixin-article/services/article-render.service.ts";
 import { createStructuredJsonCompletion } from "@src/utils/llm-structured-output.ts";
 import type { JsonObject } from "@src/core/ports/runtime-config-store.ts";
+import { ARTICLE_LLM_TIMEOUT_MS } from "@src/features/weixin-article/services/article-llm-budget.ts";
 
 const logger = new Logger("weixin-dynamic-html-generator");
 
@@ -62,6 +63,8 @@ export class WeixinDynamicHtmlGenerator {
       chatOptions: {
         temperature: 0.6,
         max_tokens: 6000,
+        timeoutMs: ARTICLE_LLM_TIMEOUT_MS.dynamicTemplate,
+        maxAttempts: 2,
         response_format: { type: "json_object" },
       },
       maxAttempts: 1,

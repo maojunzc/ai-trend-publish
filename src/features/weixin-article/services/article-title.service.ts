@@ -70,13 +70,37 @@ function normalizeTitleCandidate(value?: string): string {
     .replace(/^AI\s*速递\s*[｜|:：-]?\s*/i, "")
     .replace(/^今日\s*AI\s*(速递|快报)\s*[｜|:：-]?\s*/i, "")
     .replace(/[｜|]\s*(来源|Source|via).*/i, "")
+    .replace(
+      /\s*[-—–]\s*(36氪|量子位|机器之心|虎嗅|雷锋网|TechCrunch|The Verge|Wired)$/i,
+      "",
+    )
     .replace(/\s+/g, " ")
     .trim();
-  if (!title || /^AI\s*(趋势)?速递$/i.test(title)) {
+  if (
+    !title ||
+    /^AI\s*(趋势)?速递$/i.test(title) ||
+    isLowQualityTitle(title)
+  ) {
     return "";
   }
   return title;
 }
+
+function isLowQualityTitle(title: string): boolean {
+  return lowQualityTitlePatterns.some((pattern) => pattern.test(title));
+}
+
+const lowQualityTitlePatterns = [
+  /^补充证据不足/u,
+  /^证据不足/u,
+  /^本期只围绕/u,
+  /但更强的还在后面/u,
+  /史上首次/u,
+  /改写历史/u,
+  /夺回.*王座/u,
+  /杀回来了/u,
+  /炸裂|震撼|重磅/u,
+];
 
 function toWeixinTitle(title: string): string {
   const normalized = normalizeTitleCandidate(title) || "今日 AI 趋势观察";

@@ -110,12 +110,56 @@ Deno.test("article revision skips when there are no safe auto-fixable issues", a
     },
     qualityReview: {
       ...review,
-      issues: [{ ...review.issues[0], category: "fact", severity: "high" }],
+      issues: [{ ...review.issues[0], severity: "blocker" }],
     },
     contents: [],
   });
 
   assertEquals(result.applied, false);
+});
+
+Deno.test("article revision attempts high fact issues when marked auto-fixable", async () => {
+  const service = createService(JSON.stringify({
+    applied: true,
+    title: "事实修正标题",
+    html:
+      `<section style="margin:0;"><p style="margin:0;">已收敛成来源支持的表述。</p></section>`,
+    changes: [{
+      issueId: "issue-1",
+      field: "html",
+      before: "不可靠事实",
+      after: "来源支持的表述",
+      reason: "高风险事实问题已被审稿标记为可自动修复。",
+    }],
+    skippedIssueIds: [],
+  }));
+  const result = await service.reviseArticle({
+    round: 1,
+    title: "标题",
+    html,
+    articlePlan: {
+      generatedAt: "2026-05-23T00:00:00.000Z",
+      fallback: false,
+      format: "deep-analysis",
+      thesis: "",
+      targetReader: "",
+      summary: "",
+      sections: [],
+      titleDirections: [],
+      coverDirection: { visualBrief: "", textBrief: "", mood: "" },
+      bodyImagePlan: { enabled: false, placements: [] },
+      riskNotes: [],
+      sourceArticleIds: [],
+    },
+    qualityReview: {
+      ...review,
+      issues: [{ ...review.issues[0], category: "fact", severity: "high" }],
+    },
+    contents: [],
+  });
+
+  assertEquals(result.applied, true);
+  assertEquals(result.changedFields, ["title", "html"]);
 });
 
 Deno.test("normalizeArticleRevision falls back from invalid html only", () => {

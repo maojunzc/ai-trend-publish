@@ -26,6 +26,7 @@ import {
 } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
 import { ARTICLE_FEATURE_KEY } from "@src/app/weixin-article/runtime/article-runtime-config.ts";
 import { isCronDue } from "@src/core/storage/runtime-config-utils.ts";
+import { checkWeixinAccountRelay } from "@src/app/weixin-article/weixin-account-relay-check.ts";
 
 export async function handleRuntimeConfigApi(
   request: Request,
@@ -57,6 +58,29 @@ export async function handleRuntimeConfigApi(
         account: await store.saveWeixinAccountProfile(input),
       }, 201);
     }
+  }
+
+  const accountRelayCheckMatch = pathname.match(
+    /^\/api\/config\/weixin\/accounts\/([^/]+)\/relay-check$/,
+  );
+  if (accountRelayCheckMatch) {
+    if (request.method !== "POST") {
+      return jsonResponse({ error: "只支持 POST" }, 405);
+    }
+    const accountId = decodeURIComponent(accountRelayCheckMatch[1]);
+    const account = await store.getWeixinAccountProfile(accountId);
+    if (!account) return jsonResponse({ error: "公众号账号不存在" }, 404);
+    const check = await checkWeixinAccountRelay(baseConfig, accountId);
+    await store.saveWeixinAccountProfile({
+      ...account,
+      ops: {
+        ...account.ops,
+        relayCheck: relayCheckToAccountOps(check),
+      },
+    });
+    return jsonResponse({
+      check,
+    });
   }
 
   const accountMatch = pathname.match(
@@ -393,6 +417,7 @@ function weixinAccountFromBody(
     defaultArticleProfileId: stringValue(body.defaultArticleProfileId),
     brand: objectValue(body.brand),
     defaults: objectValue(body.defaults),
+    ops: objectValue(body.ops),
   };
 }
 
@@ -412,6 +437,7 @@ function weixinAccountPatchFromBody(
     defaults: Object.hasOwn(body, "defaults")
       ? objectValue(body.defaults)
       : existing.defaults,
+    ops: Object.hasOwn(body, "ops") ? objectValue(body.ops) : existing.ops,
   };
 }
 
@@ -424,6 +450,7 @@ function withWeixinAccountRelayStatus(
     ? weixin
     : weixin.accounts[account.id];
   const defaultConfigured = isResolvedWeixinAccountConfigured(weixin);
+  const relayCheck = objectValue(account.ops?.relayCheck);
   return {
     ...account,
     relay: {
@@ -434,9 +461,23 @@ function withWeixinAccountRelayStatus(
       appIdMasked: providerAccount
         ? maskAppId(providerAccount.appId)
         : undefined,
-      lastCheckedAt: new Date().toISOString(),
+      lastCheckedAt: stringValue(relayCheck?.checkedAt),
+      lastCheck: relayCheck,
     },
   };
+}
+
+function relayCheckToAccountOps(
+  check: Awaited<ReturnType<typeof checkWeixinAccountRelay>>,
+): JsonObject {
+  return compactJsonObject({
+    checkedAt: check.checkedAt,
+    ok: check.ok,
+    status: check.status,
+    message: check.message,
+    relayUrl: check.relayUrl,
+    appIdMasked: check.appIdMasked,
+  });
 }
 
 function maskAppId(
@@ -465,8 +506,31 @@ function validateWeixinAccount(
   if (!objectValue(account.brand)) {
     issues.push({ path: "brand", message: "brand 必须是对象" });
   }
-  if (!objectValue(account.defaults)) {
+  const defaults = objectValue(account.defaults);
+  if (!defaults) {
     issues.push({ path: "defaults", message: "defaults 必须是对象" });
+  } else if (defaults.sourceGroupIds !== undefined) {
+    if (!Array.isArray(defaults.sourceGroupIds)) {
+      issues.push({
+        path: "defaults.sourceGroupIds",
+        message: "sourceGroupIds 必须是字符串数组",
+      });
+    } else {
+      defaults.sourceGroupIds.forEach((item, index) => {
+        if (
+          typeof item !== "string" ||
+          !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(item.trim())
+        ) {
+          issues.push({
+            path: `defaults.sourceGroupIds.${index}`,
+            message: "数据源分组名无效",
+          });
+        }
+      });
+    }
+  }
+  if (account.ops !== undefined && !objectValue(account.ops)) {
+    issues.push({ path: "ops", message: "ops 必须是对象" });
   }
   return issues;
 }
@@ -1024,4 +1088,14 @@ function objectValue(value: unknown): JsonObject | undefined {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
     ? value as JsonObject
     : undefined;
+}
+
+function compactJsonObject(
+  value: Record<string, JsonValue | undefined>,
+): JsonObject {
+  const result: JsonObject = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item !== undefined) result[key] = item;
+  }
+  return result;
 }

@@ -8,6 +8,14 @@ export interface ChatCompletionOptions {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  /**
+   * 单次模型调用的场景级超时。用于让可降级步骤快速失败，例如动态模板或质量审稿。
+   */
+  timeoutMs?: number;
+  /**
+   * 单次模型调用的场景级最大尝试次数。未设置时使用 provider 默认值。
+   */
+  maxAttempts?: number;
   stream?: boolean;
   response_format?: {
     type: "json_object" | "text";

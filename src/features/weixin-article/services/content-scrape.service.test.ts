@@ -136,6 +136,59 @@ Deno.test("content scrape service filters old items and truncates every source",
   assertEquals(result.health.totalArticles, 2);
 });
 
+Deno.test("content scrape service expands article links from list pages", async () => {
+  const fetcher: ArticleContentFetcher = {
+    scrape: () =>
+      Promise.resolve({
+        contents: [{
+          id: "openai-news",
+          title: "OpenAI News",
+          content: [
+            "[A shared playbook for trustworthy third party evaluations Safety May 29, 2026](https://openai.com/index/trustworthy-third-party-evaluations-foundations/)",
+            "[OpenAI’s Frontier Governance Framework Safety May 28, 2026](https://openai.com/index/openai-frontier-governance-framework/)",
+            "[Building self-improving tax agents with Codex Engineering May 27, 2026](https://openai.com/index/building-self-improving-tax-agents-with-codex/)",
+            "![Image 1](https://openai.com/static/card.png)",
+            "[Privacy](https://openai.com/privacy/)",
+          ].join("\n\n"),
+          url: "https://openai.com/news/",
+          publishDate: "2026-05-29",
+          metadata: {},
+        }],
+        provider: "mock",
+        failures: [],
+      }),
+  };
+  const stats = { success: 0, failed: 0, contents: 0, duplicates: 0 };
+  const service = new WeixinArticleContentScrapeService(
+    [{
+      raw: "https://openai.com/news/",
+      group: "default",
+      url: "https://openai.com/news/",
+      providers: ["mock"],
+    }],
+    notifier([]),
+    stats,
+    fetcher,
+    { maxAgeDays: 30, maxItemsPerSource: 10 },
+  );
+
+  const sources = await service.loadSources();
+  const result = await service.scrapeAllDetailed(sources);
+
+  assertEquals(result.contents.map((item) => item.id), [
+    "openai-news",
+    "https://openai.com/index/trustworthy-third-party-evaluations-foundations",
+    "https://openai.com/index/openai-frontier-governance-framework",
+    "https://openai.com/index/building-self-improving-tax-agents-with-codex",
+  ]);
+  assertEquals(
+    result.contents[1].metadata.source,
+    "linked-article-candidate",
+  );
+  assertEquals(result.contents[1].metadata.requiresHydration, true);
+  assertEquals(result.health.records[0].articleCount, 4);
+});
+
 function content(id: string, publishDate: string) {
   return {
     id,

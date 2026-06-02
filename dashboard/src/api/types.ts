@@ -101,6 +101,7 @@ export interface ConfigSummary {
       enabled: boolean;
       minScore: number;
       blockOnHighFactIssue: boolean;
+      forcePublish: boolean;
       allowForcePublish: boolean;
       maxRevisionRounds: number;
     };
@@ -178,14 +179,163 @@ export interface WeixinAccountProfile {
   defaultArticleProfileId?: string;
   brand: Record<string, unknown>;
   defaults: Record<string, unknown>;
+  ops?: Record<string, unknown>;
   relay?: {
     configured: boolean;
     defaultConfigured?: boolean;
     appIdMasked?: string;
     lastCheckedAt?: string;
+    lastCheck?: {
+      checkedAt?: string;
+      ok?: boolean;
+      status?: string;
+      message?: string;
+      relayUrl?: string;
+      appIdMasked?: string;
+    };
   };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WeixinAccountRelayCheck {
+  accountId: string;
+  ok: boolean;
+  status:
+    | "ok"
+    | "relay_unconfigured"
+    | "account_unconfigured"
+    | "ip_not_whitelisted"
+    | "failed";
+  checkedAt: string;
+  relayConfigured: boolean;
+  accountConfigured: boolean;
+  appIdMasked?: string;
+  relayUrl?: string;
+  result?: string | boolean;
+  message: string;
+}
+
+export interface WeixinAccountInsight {
+  accountId: string;
+  totalRuns: number;
+  latestRun?: {
+    runId: string;
+    status: RunStatus;
+    dryRun: boolean;
+    createdAt: string;
+    finishedAt?: string;
+  };
+  latestMatrixRunId?: string;
+  averageQualityScore?: number;
+  recentArticles: Array<{
+    runId: string;
+    title: string;
+    qualityScore?: number;
+    publishStatus: string;
+    dryRun: boolean;
+    createdAt: string;
+  }>;
+  publishStatusCounts: Record<string, number>;
+  feedbackCounts: Record<EditorialFeedbackRating, number>;
+  topicFeedbackCounts: Record<EditorialTopicFeedbackAction, number>;
+  latestFeedback?: {
+    runId: string;
+    rating: EditorialFeedbackRating;
+    note?: string;
+    updatedAt: string;
+  };
+  latestTopicFeedback?: {
+    runId: string;
+    topicId: string;
+    action: EditorialTopicFeedbackAction;
+    title?: string;
+    reason?: string;
+    updatedAt: string;
+  };
+  learning: {
+    profileCompleteness: {
+      score: number;
+      missingFields: string[];
+      presentFields: string[];
+    };
+    qualityTrend: {
+      direction: "up" | "down" | "stable" | "unknown";
+      label: string;
+      delta?: number;
+      recentAverage?: number;
+      previousAverage?: number;
+    };
+    writingGuidance: string[];
+    riskSignals: Array<{
+      type:
+        | "profile"
+        | "quality"
+        | "feedback"
+        | "topic"
+        | "source"
+        | "publish";
+      tone: "success" | "info" | "warning" | "danger";
+      title: string;
+      detail: string;
+      evidence?: string;
+    }>;
+    recommendedActions: Array<{
+      type:
+        | "profile"
+        | "quality"
+        | "feedback"
+        | "topic"
+        | "source"
+        | "publish";
+      tone: "success" | "info" | "warning" | "danger";
+      title: string;
+      detail: string;
+      evidence?: string;
+    }>;
+  };
+}
+
+export interface AccountLearningSnapshot {
+  generatedAt: string;
+  accountId?: string;
+  profileId?: string;
+  memoryScope: "account-strict" | "mixed-or-global";
+  profile: {
+    completenessScore: number;
+    presentFields: string[];
+    missingFields: string[];
+    positioning?: string;
+    audience?: string;
+    tone?: string;
+    titleStyle?: string;
+  };
+  feedback: {
+    counts: Record<EditorialFeedbackRating, number>;
+    latestGood?: string;
+    latestBad?: string;
+  };
+  topicFeedback: {
+    counts: Record<EditorialTopicFeedbackAction, number>;
+    lead: string[];
+    adopt: string[];
+    skip: string[];
+  };
+  recentArticles: Array<{
+    title: string;
+    qualityScore?: number;
+    publishStatus: string;
+    createdAt: string;
+  }>;
+  sourceSignals: Array<{
+    url: string;
+    group: string;
+    successRate: number;
+    totalArticles: number;
+    lastStatus: string;
+  }>;
+  appliedGuidance: string[];
+  deterministicRules: string[];
 }
 
 export interface SourceDraft {
@@ -222,6 +372,7 @@ export interface ArticleFormDraft {
   qualityGateEnabled: boolean;
   qualityGateMinScore: string;
   qualityGateBlockOnHighFactIssue: boolean;
+  qualityGateForcePublish: boolean;
   qualityGateAllowForcePublish: boolean;
   qualityGateMaxRevisionRounds: string;
 }
@@ -349,18 +500,33 @@ export interface SourcePerformanceRecord {
 }
 
 export type EditorialFeedbackRating = "good" | "ok" | "bad";
+export type EditorialTopicFeedbackAction = "lead" | "adopt" | "skip";
 
 export interface EditorialRunFeedback {
   runId: string;
   profileId?: string;
+  accountId?: string;
   rating: EditorialFeedbackRating;
   note?: string;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface EditorialTopicFeedback {
+  runId: string;
+  topicId: string;
+  profileId?: string;
+  accountId?: string;
+  action: EditorialTopicFeedbackAction;
+  title?: string;
+  reason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface EditorialMemoryContext {
   recentArticles: Array<{
+    accountId?: string;
     title: string;
     thesis?: string;
     qualityScore?: number;
@@ -369,6 +535,7 @@ export interface EditorialMemoryContext {
   }>;
   sourcePerformance: SourcePerformanceRecord[];
   recentFeedback: EditorialRunFeedback[];
+  recentTopicFeedback: EditorialTopicFeedback[];
 }
 
 export interface ArticlePlanSection {

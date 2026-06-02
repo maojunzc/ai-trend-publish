@@ -47,12 +47,16 @@ export function evaluateArticleQualityGate(
     };
   }
 
-  if (input.forcePublish && input.config.allowForcePublish) {
+  const configForcePublish = input.config.forcePublish === true;
+  const requestForcePublish = input.forcePublish &&
+    input.config.allowForcePublish;
+  if (configForcePublish || requestForcePublish) {
+    const source = configForcePublish ? "配置项 forcePublish" : "forcePublish";
     return {
       allowed: true,
       bypassed: true,
       action: "bypass",
-      reason: `forcePublish 已绕过质量门禁: ${blockReason}`,
+      reason: `${source} 已绕过质量门禁: ${blockReason}`,
     };
   }
 

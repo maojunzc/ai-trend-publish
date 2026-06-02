@@ -9,85 +9,26 @@ import {
   Layers3,
   Loader2,
   Newspaper,
+  PenLine,
   Play,
   Rocket,
   ShieldCheck,
+  Target,
+  Users2,
   XCircle,
 } from "lucide-react";
+import type {
+  ArticleRunRecord,
+  ArticleRuntimeProfileDetail,
+  ConfigSummary,
+  HealthResponse,
+  RunStatus,
+  WeixinAccountProfile,
+} from "../api/types.ts";
 import type { DashboardView } from "../dashboard/views.ts";
 import { Badge, Button, Card, EmptyState } from "./ui.tsx";
 
-type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 type BadgeTone = "success" | "danger" | "info" | "muted";
-
-interface ArticleRunRecord {
-  runId: string;
-  mode: string;
-  status: RunStatus;
-  dryRun: boolean;
-  trigger: string;
-  createdAt: string;
-  updatedAt: string;
-  artifacts: Array<{ key: string; label?: string; contentType?: string }>;
-}
-
-interface HealthResponse {
-  ok: boolean;
-  mode: string;
-  timestamp: string;
-  checks: Record<string, { ok: boolean; detail: string }>;
-}
-
-interface ConfigSummary {
-  mode: string;
-  article: {
-    dryRunDefault: boolean;
-    count: number;
-    sourcesCount: number;
-    renderer: {
-      template: string;
-      promptProfile: string;
-    };
-    publisher: {
-      provider: string;
-      accountId?: string;
-    };
-    cover: {
-      enabled: boolean;
-      provider: string;
-      model: string;
-    };
-    bodyImages: {
-      mode: string;
-      provider: string;
-      model: string;
-      count: number;
-      size: string;
-    };
-    deduplication: {
-      enabled: boolean;
-      embeddingProvider: string;
-      vectorStore: string;
-    };
-    qualityGate: {
-      enabled: boolean;
-      minScore: number;
-      maxRevisionRounds: number;
-    };
-  };
-  storage: {
-    artifacts: string;
-    runState: string;
-    runtimeConfig: string;
-    vector: string;
-  };
-  fetchGroups: string[];
-  providersConfigured: Record<string, boolean>;
-  observability: {
-    enabled: boolean;
-    sinks: string[];
-  };
-}
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -120,10 +61,12 @@ function statusIcon(status?: RunStatus) {
 }
 
 export function ArticleWorkbenchHome(
-  { health, config, latestRun, onNavigate, onRun }: {
+  { health, config, latestRun, accounts, profiles, onNavigate, onRun }: {
     health: HealthResponse | null;
     config: ConfigSummary | null;
     latestRun: ArticleRunRecord | undefined;
+    accounts: WeixinAccountProfile[];
+    profiles: ArticleRuntimeProfileDetail[];
     onNavigate: (view: DashboardView) => void;
     onRun: () => void;
   },
@@ -133,25 +76,73 @@ export function ArticleWorkbenchHome(
     .filter(Boolean).length;
   const providerTotal = Object.keys(config?.providersConfigured ?? {}).length;
   const decision = publishDecision(config, latestRun);
+  const enabledAccounts = accounts.filter((account) => account.enabled);
+  const defaultAccount = pickDefaultAccount(accounts, config);
+  const defaultProfile = pickDefaultProfile(profiles, defaultAccount);
+  const qualityMode = qualityGateLabel(config);
 
   return (
     <div className="grid gap-4">
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="overflow-hidden p-0">
-          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
             <div className="p-5">
               <div className="tp-kicker">发布中心</div>
               <h2 className="mt-2 text-[28px] font-semibold leading-tight text-[var(--tp-ink)]">
-                今天这篇文章，是否值得进入草稿箱？
+                今天发什么，发给谁，是否进入草稿箱？
               </h2>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--tp-muted)]">
-                TrendPublish 的控制台只围绕一件事组织：从数据源发现选题，
-                生成有证据、有结构、有审稿结果的微信文章，然后安全地创建草稿。
+                这里不展示系统杂项，只回答一次微信文章生产最关键的四件事：
+                选题来源是否足够、账号风格是否明确、质量风险是否可控、下一步是否创建草稿。
               </p>
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <AnswerTile
+                  label="目标账号"
+                  value={defaultAccount?.name ?? "未指定"}
+                  detail={enabledAccounts.length
+                    ? `${enabledAccounts.length} 个账号可运行`
+                    : "先配置账号矩阵"}
+                  icon={<Users2 className="size-3.5" />}
+                  tone={enabledAccounts.length ? "success" : "danger"}
+                  onClick={() => onNavigate("accounts")}
+                />
+                <AnswerTile
+                  label="文章方案"
+                  value={defaultProfile?.profile.name ??
+                    config?.article.renderer.template ??
+                    "-"}
+                  detail={`${config?.article.count ?? 0} 篇候选 · ${
+                    config?.article.renderer.promptProfile ?? "默认风格"
+                  }`}
+                  icon={<PenLine className="size-3.5" />}
+                  tone="info"
+                  onClick={() => onNavigate("trend")}
+                />
+                <AnswerTile
+                  label="质量策略"
+                  value={qualityMode.title}
+                  detail={qualityMode.detail}
+                  icon={<ShieldCheck className="size-3.5" />}
+                  tone={qualityMode.tone}
+                  onClick={() => onNavigate("quality")}
+                />
+                <AnswerTile
+                  label="下一步"
+                  value={decision.label}
+                  detail={decision.action}
+                  icon={<Rocket className="size-3.5" />}
+                  tone={decision.tone}
+                  onClick={() => onNavigate(decision.view)}
+                />
+              </div>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button type="button" variant="primary" onClick={onRun}>
                   <Play className="size-3.5" />
                   运行 dry-run
+                </Button>
+                <Button type="button" onClick={() => onNavigate("accounts")}>
+                  <Users2 className="size-3.5" />
+                  账号矩阵
                 </Button>
                 <Button type="button" onClick={() => onNavigate("quality")}>
                   <ShieldCheck className="size-3.5" />
@@ -172,6 +163,22 @@ export function ArticleWorkbenchHome(
               </div>
               <div className="text-sm leading-6 text-[var(--tp-muted)]">
                 {decision.detail}
+              </div>
+              <div className="mt-4 grid gap-2 text-xs">
+                <SetupLine
+                  label="默认账号"
+                  value={defaultAccount?.name ?? "未配置"}
+                />
+                <SetupLine
+                  label="文章方案"
+                  value={defaultProfile?.profile.name ?? "使用默认方案"}
+                />
+                <SetupLine
+                  label="真实发布"
+                  value={config?.article.qualityGate.forcePublish
+                    ? "不达标也创建草稿"
+                    : "按质量门禁阻断"}
+                />
               </div>
               <button
                 type="button"
@@ -317,6 +324,44 @@ export function ArticleWorkbenchHome(
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-[var(--tp-ink)]">
+                  账号发布队列
+                </h3>
+                <p className="mt-1 text-xs text-[var(--tp-muted)]">
+                  每个账号保留自己的定位、读者和标题风格，运行时生成独立产物。
+                </p>
+              </div>
+              <Badge tone={enabledAccounts.length ? "success" : "muted"}>
+                {enabledAccounts.length} enabled
+              </Badge>
+            </div>
+            {enabledAccounts.length
+              ? (
+                <div className="grid gap-2">
+                  {enabledAccounts.slice(0, 4).map((account) => (
+                    <AccountQueueRow
+                      key={account.id}
+                      account={account}
+                      profile={profileName(profiles, account)}
+                    />
+                  ))}
+                  {enabledAccounts.length > 4 && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("accounts")}
+                      className="rounded-md border border-dashed border-[var(--tp-border)] px-3 py-2 text-left text-xs font-medium text-[var(--tp-muted)] hover:bg-[var(--tp-hover)]"
+                    >
+                      还有 {enabledAccounts.length - 4} 个账号，查看账号矩阵
+                    </button>
+                  )}
+                </div>
+              )
+              : <EmptyState>还没有启用的公众号账号</EmptyState>}
+          </Card>
+
+          <Card>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-[var(--tp-ink)]">
                   系统状态
                 </h3>
                 <p className="mt-1 text-xs text-[var(--tp-muted)]">
@@ -388,7 +433,9 @@ export function ArticleWorkbenchHome(
               <SetupLine
                 label="质量门禁"
                 value={config?.article.qualityGate.enabled
-                  ? `≥ ${config.article.qualityGate.minScore}`
+                  ? config.article.qualityGate.forcePublish
+                    ? `强制发布 · ≥ ${config.article.qualityGate.minScore}`
+                    : `≥ ${config.article.qualityGate.minScore}`
                   : "关闭"}
               />
               <SetupLine
@@ -510,6 +557,95 @@ function SignalButton(
   );
 }
 
+function AnswerTile(
+  {
+    label,
+    value,
+    detail,
+    icon,
+    tone,
+    onClick,
+  }: {
+    label: string;
+    value: string;
+    detail: string;
+    icon: React.ReactNode;
+    tone: BadgeTone;
+    onClick: () => void;
+  },
+) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group rounded-md border border-[var(--tp-border)] bg-white px-3 py-2.5 text-left transition hover:border-[#bfdbfe] hover:bg-[#f8fafc]"
+    >
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium text-[var(--tp-subtle)]">
+          {label}
+        </span>
+        <span
+          className={cx(
+            "grid size-6 place-items-center rounded-md",
+            tone === "success" && "bg-[#ecfdf5] text-[#047857]",
+            tone === "danger" && "bg-[#fef2f2] text-[#b91c1c]",
+            tone === "info" && "bg-[#eff6ff] text-[#2563eb]",
+            tone === "muted" && "bg-[#f8fafc] text-[#64748b]",
+          )}
+        >
+          {icon}
+        </span>
+      </div>
+      <div className="truncate text-sm font-semibold text-[var(--tp-ink)]">
+        {value}
+      </div>
+      <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-[var(--tp-muted)]">
+        {detail}
+      </div>
+    </button>
+  );
+}
+
+function AccountQueueRow(
+  { account, profile }: {
+    account: WeixinAccountProfile;
+    profile: string;
+  },
+) {
+  const positioning = textValue(account.brand.positioning) ?? "未配置账号定位";
+  const tone = textValue(account.brand.tone) ?? "未配置语气";
+
+  return (
+    <div className="rounded-md border border-[var(--tp-border)] bg-white px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-semibold text-[var(--tp-ink)]">
+              {account.name}
+            </span>
+            <Badge tone={account.relay?.configured ? "success" : "danger"}>
+              {account.relay?.configured ? "relay ready" : "未连接"}
+            </Badge>
+          </div>
+          <div className="mt-1 truncate text-xs text-[var(--tp-muted)]">
+            {positioning}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-[11px] text-[var(--tp-subtle)]">默认方案</div>
+          <div className="mt-0.5 max-w-[128px] truncate text-xs font-medium text-[var(--tp-ink)]">
+            {profile}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--tp-subtle)]">
+        <Target className="size-3.5" />
+        <span className="truncate">{tone}</span>
+      </div>
+    </div>
+  );
+}
+
 function pipelineRows(
   config: ConfigSummary | null,
   latestRun: ArticleRunRecord | undefined,
@@ -552,11 +688,21 @@ function pipelineRows(
     {
       name: "草稿发布",
       stage: "Publish",
-      detail: config?.article.dryRunDefault
+      detail: config?.article.qualityGate.forcePublish
+        ? "真实发布默认强制创建草稿；质量问题会保留到复盘中。"
+        : config?.article.dryRunDefault
         ? "默认 dry-run。真实发布需要二次确认，只创建公众号草稿。"
         : "默认创建公众号草稿。远程部署建议通过 weixin-relay 转发。",
-      state: config?.article.dryRunDefault ? "guarded" : "live",
-      tone: config?.article.dryRunDefault ? "info" : "success",
+      state: config?.article.qualityGate.forcePublish
+        ? "force"
+        : config?.article.dryRunDefault
+        ? "guarded"
+        : "live",
+      tone: config?.article.qualityGate.forcePublish
+        ? "info"
+        : config?.article.dryRunDefault
+        ? "info"
+        : "success",
       icon: <Rocket className="size-4" />,
       view: "runs" as const,
     },
@@ -580,4 +726,64 @@ function SetupLine({ label, value }: { label: string; value: string }) {
       </div>
     </div>
   );
+}
+
+function pickDefaultAccount(
+  accounts: WeixinAccountProfile[],
+  config: ConfigSummary | null,
+) {
+  const configuredId = config?.article.publisher.accountId;
+  return accounts.find((account) => account.id === configuredId) ??
+    accounts.find((account) => account.enabled && account.id === "default") ??
+    accounts.find((account) => account.enabled) ??
+    accounts[0];
+}
+
+function pickDefaultProfile(
+  profiles: ArticleRuntimeProfileDetail[],
+  account?: WeixinAccountProfile,
+) {
+  const accountProfileId = account?.defaultArticleProfileId ??
+    textValue(account?.defaults.articleProfileId);
+  return profiles.find((item) => item.profile.id === accountProfileId) ??
+    profiles.find((item) => item.profile.isDefault) ??
+    profiles[0];
+}
+
+function profileName(
+  profiles: ArticleRuntimeProfileDetail[],
+  account: WeixinAccountProfile,
+) {
+  return pickDefaultProfile(profiles, account)?.profile.name ?? "默认文章方案";
+}
+
+function qualityGateLabel(config: ConfigSummary | null): {
+  title: string;
+  detail: string;
+  tone: BadgeTone;
+} {
+  const gate = config?.article.qualityGate;
+  if (!gate?.enabled) {
+    return {
+      title: "未启用",
+      detail: "不会阻断草稿创建",
+      tone: "muted",
+    };
+  }
+  if (gate.forcePublish) {
+    return {
+      title: "强制草稿",
+      detail: `评分目标 ≥ ${gate.minScore}，不达标也继续`,
+      tone: "info",
+    };
+  }
+  return {
+    title: `≥ ${gate.minScore} 分`,
+    detail: gate.blockOnHighFactIssue ? "高风险事实问题会阻断" : "只按总分判断",
+    tone: "success",
+  };
+}
+
+function textValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
