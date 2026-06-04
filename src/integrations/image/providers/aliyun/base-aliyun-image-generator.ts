@@ -3,6 +3,10 @@ import axios from "npm:axios@1.8.3";
 import { Logger } from "@zilla/logger";
 
 const logger = new Logger("aliyun");
+const ALIYUN_SUBMIT_TIMEOUT_MS = 30_000;
+const ALIYUN_STATUS_TIMEOUT_MS = 30_000;
+const ALIYUN_MULTIMODAL_TIMEOUT_MS = 120_000;
+const ALIYUN_TASK_MAX_WAIT_MS = 120_000;
 
 /**
  * 阿里云基础任务响应接口
@@ -105,6 +109,7 @@ export abstract class BaseAliyunImageGenerator<
             "Authorization": `Bearer ${this.apiKey}`,
             "X-DashScope-Async": "enable",
           },
+          timeout: ALIYUN_SUBMIT_TIMEOUT_MS,
         },
       );
       logger.debug(`阿里云API调用成功: ${response.data.request_id}`, {
@@ -138,6 +143,7 @@ export abstract class BaseAliyunImageGenerator<
             "Authorization": `Bearer ${this.apiKey}`,
             "Content-Type": "application/json",
           },
+          timeout: ALIYUN_STATUS_TIMEOUT_MS,
         },
       );
       return response.data.output;
@@ -176,6 +182,7 @@ export abstract class BaseAliyunImageGenerator<
             "Content-Type": "application/json",
             "Authorization": `Bearer ${this.apiKey}`,
           },
+          timeout: ALIYUN_MULTIMODAL_TIMEOUT_MS,
         },
       );
       return extractMultimodalImageUrl(response.data);
@@ -205,8 +212,9 @@ export abstract class BaseAliyunImageGenerator<
     interval: number = 2000,
   ): Promise<string> {
     let attempts = 0;
+    const deadline = Date.now() + ALIYUN_TASK_MAX_WAIT_MS;
 
-    while (attempts < maxAttempts) {
+    while (attempts < maxAttempts && Date.now() < deadline) {
       const status = await this.checkTaskStatus(taskId);
 
       if (status.task_status === "SUCCEEDED") {
@@ -221,7 +229,9 @@ export abstract class BaseAliyunImageGenerator<
       attempts++;
     }
 
-    throw new Error("等待图片生成超时");
+    throw new Error(
+      `等待图片生成超时: taskId=${taskId}, attempts=${attempts}`,
+    );
   }
 
   /**

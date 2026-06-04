@@ -17,7 +17,7 @@ Deno.test("content scrape service uses injected fetcher and continues after sour
               title: "ok",
               content: "content",
               url: source.url,
-              publishDate: "2026-05-21",
+              publishDate: daysAgo(1),
               metadata: {},
             }],
             provider: "mock",
@@ -36,12 +36,14 @@ Deno.test("content scrape service uses injected fetcher and continues after sour
         raw: "https://example.com/fail",
         group: "default",
         url: "https://example.com/fail",
+        kind: "url",
         providers: ["mock"],
       },
       {
         raw: "https://example.com/ok",
         group: "default",
         url: "https://example.com/ok",
+        kind: "url",
         providers: ["mock"],
       },
     ],
@@ -81,6 +83,7 @@ Deno.test("content scrape service can return health report when every source fai
       raw: "https://example.com/fail",
       group: "default",
       url: "https://example.com/fail",
+      kind: "url",
       providers: ["mock"],
     }],
     notifier([]),
@@ -102,9 +105,9 @@ Deno.test("content scrape service filters old items and truncates every source",
     scrape: () =>
       Promise.resolve({
         contents: [
-          content("old", "2026-04-01"),
-          content("newer", "2026-05-22"),
-          content("newest", "2026-05-23"),
+          content("old", daysAgo(30)),
+          content("newer", daysAgo(2)),
+          content("newest", daysAgo(1)),
           content("unknown", "not-a-date"),
         ],
         provider: "mock",
@@ -117,6 +120,7 @@ Deno.test("content scrape service filters old items and truncates every source",
       raw: "https://example.com/feed",
       group: "default",
       url: "https://example.com/feed",
+      kind: "url",
       providers: ["mock"],
     }],
     notifier([]),
@@ -144,14 +148,20 @@ Deno.test("content scrape service expands article links from list pages", async 
           id: "openai-news",
           title: "OpenAI News",
           content: [
-            "[A shared playbook for trustworthy third party evaluations Safety May 29, 2026](https://openai.com/index/trustworthy-third-party-evaluations-foundations/)",
-            "[OpenAI’s Frontier Governance Framework Safety May 28, 2026](https://openai.com/index/openai-frontier-governance-framework/)",
-            "[Building self-improving tax agents with Codex Engineering May 27, 2026](https://openai.com/index/building-self-improving-tax-agents-with-codex/)",
+            `[A shared playbook for trustworthy third party evaluations Safety ${
+              englishDateDaysAgo(3)
+            }](https://openai.com/index/trustworthy-third-party-evaluations-foundations/)`,
+            `[OpenAI’s Frontier Governance Framework Safety ${
+              englishDateDaysAgo(4)
+            }](https://openai.com/index/openai-frontier-governance-framework/)`,
+            `[Building self-improving tax agents with Codex Engineering ${
+              englishDateDaysAgo(5)
+            }](https://openai.com/index/building-self-improving-tax-agents-with-codex/)`,
             "![Image 1](https://openai.com/static/card.png)",
             "[Privacy](https://openai.com/privacy/)",
           ].join("\n\n"),
           url: "https://openai.com/news/",
-          publishDate: "2026-05-29",
+          publishDate: daysAgo(1),
           metadata: {},
         }],
         provider: "mock",
@@ -164,6 +174,7 @@ Deno.test("content scrape service expands article links from list pages", async 
       raw: "https://openai.com/news/",
       group: "default",
       url: "https://openai.com/news/",
+      kind: "url",
       providers: ["mock"],
     }],
     notifier([]),
@@ -198,6 +209,21 @@ function content(id: string, publishDate: string) {
     publishDate,
     metadata: {},
   };
+}
+
+function daysAgo(days: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString();
+}
+
+function englishDateDaysAgo(days: number): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(daysAgo(days)));
 }
 
 function notifier(warnings: string[]): INotifier {

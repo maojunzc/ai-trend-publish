@@ -66,3 +66,39 @@ Deno.test("cover service records fallback reason", async () => {
   assertEquals(result.error, "task failed");
   assertEquals(uploaded, [""]);
 });
+
+Deno.test("cover service falls back when image generation hangs", async () => {
+  const uploaded: string[] = [];
+  const service = new WeixinArticleCoverService(
+    {
+      uploadImage: async (url: string) => {
+        uploaded.push(url);
+        return "media-default";
+      },
+    },
+    {
+      getGenerator: async () => ({
+        initialize: async () => {},
+        refresh: async () => {},
+        saveToFile: async () => {},
+        generate: () => new Promise<string>(() => {}),
+      }),
+    },
+    "technology",
+    "qwen-image-2.0-pro",
+    ImageGeneratorType.ALIYUN_POSTER,
+    undefined,
+    {
+      generationMs: 5,
+      fallbackUploadMs: 50,
+    },
+  );
+
+  const result = await service.generateCover("AI速递 | 新模型发布");
+
+  assertEquals(result.mediaId, "media-default");
+  assertEquals(result.generated, false);
+  assertEquals(result.fallback, true);
+  assertEquals(result.error, "封面图片生成超时");
+  assertEquals(uploaded, [""]);
+});
