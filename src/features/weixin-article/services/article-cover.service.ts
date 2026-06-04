@@ -16,7 +16,8 @@ import { formatAccountBrandGuide } from "@src/prompts/account-brand.ts";
 const logger = new Logger("weixin-article-cover-service");
 const DEFAULT_COVER_GENERATION_TIMEOUT_MS = 150_000;
 const DEFAULT_COVER_UPLOAD_TIMEOUT_MS = 45_000;
-const DEFAULT_COVER_FALLBACK_UPLOAD_TIMEOUT_MS = 30_000;
+export const DEFAULT_COVER_MEDIA_ID =
+  "SwCSRjrdGJNaWioRQUHzgF68BHFkSlb_f5xlTquvsOSA6Yy0ZRjFo0aW9eS3JJu_";
 
 export interface ArticleCoverImageGeneratorResolver {
   getGenerator(
@@ -46,7 +47,6 @@ export interface CoverGenerationResult {
 export interface ArticleCoverTimeoutOptions {
   generationMs?: number;
   uploadMs?: number;
-  fallbackUploadMs?: number;
 }
 
 export class WeixinArticleCoverService {
@@ -62,6 +62,7 @@ export class WeixinArticleCoverService {
       | ImageGeneratorType.MINIMAX_IMAGE = ImageGeneratorType.ALIYUN_POSTER,
     private readonly accountBrand?: JsonObject,
     timeoutOptions: ArticleCoverTimeoutOptions = {},
+    private readonly defaultCoverMediaId = DEFAULT_COVER_MEDIA_ID,
   ) {
     this.timeouts = {
       generationMs: normalizeTimeoutMs(
@@ -71,10 +72,6 @@ export class WeixinArticleCoverService {
       uploadMs: normalizeTimeoutMs(
         timeoutOptions.uploadMs,
         DEFAULT_COVER_UPLOAD_TIMEOUT_MS,
-      ),
-      fallbackUploadMs: normalizeTimeoutMs(
-        timeoutOptions.fallbackUploadMs,
-        DEFAULT_COVER_FALLBACK_UPLOAD_TIMEOUT_MS,
       ),
     };
   }
@@ -92,11 +89,7 @@ export class WeixinArticleCoverService {
         `[封面生成] 动态封面生成失败，使用默认封面继续发布: ${redacted.message}`,
       );
       return {
-        mediaId: await withTimeout(
-          () => this.publisher.uploadImage(""),
-          this.timeouts.fallbackUploadMs,
-          "默认封面上传超时",
-        ),
+        mediaId: this.defaultCoverMediaId,
         generated: false,
         fallback: true,
         generatorType: this.imageGeneratorType,

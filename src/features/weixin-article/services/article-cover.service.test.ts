@@ -1,6 +1,9 @@
 import { assertEquals } from "@std/assert";
 import { ImageGeneratorType } from "@src/core/ports/image-generator.ts";
-import { WeixinArticleCoverService } from "@src/features/weixin-article/services/article-cover.service.ts";
+import {
+  DEFAULT_COVER_MEDIA_ID,
+  WeixinArticleCoverService,
+} from "@src/features/weixin-article/services/article-cover.service.ts";
 
 Deno.test("cover service records generated cover details", async () => {
   const uploaded: string[] = [];
@@ -60,11 +63,11 @@ Deno.test("cover service records fallback reason", async () => {
 
   const result = await service.generateCover("AI速递 | 新模型发布");
 
-  assertEquals(result.mediaId, "media-default");
+  assertEquals(result.mediaId, DEFAULT_COVER_MEDIA_ID);
   assertEquals(result.generated, false);
   assertEquals(result.fallback, true);
   assertEquals(result.error, "task failed");
-  assertEquals(uploaded, [""]);
+  assertEquals(uploaded, []);
 });
 
 Deno.test("cover service falls back when image generation hangs", async () => {
@@ -90,15 +93,14 @@ Deno.test("cover service falls back when image generation hangs", async () => {
     undefined,
     {
       generationMs: 5,
-      fallbackUploadMs: 50,
     },
   );
 
   const result = await service.generateCover("AI速递 | 新模型发布");
 
-  assertEquals(result.mediaId, "media-default");
+  assertEquals(result.mediaId, DEFAULT_COVER_MEDIA_ID);
   assertEquals(result.generated, false);
   assertEquals(result.fallback, true);
   assertEquals(result.error, "封面图片生成超时");
-  assertEquals(uploaded, [""]);
+  assertEquals(uploaded, []);
 });
