@@ -55,6 +55,29 @@ fetchGroups: {
 },
 ```
 
+如果你想直接聚合自己维护的 RSS / Atom / JSON Feed，也可以把订阅地址直接放进
+`features.article.sources`：
+
+```ts
+features: {
+  article: {
+    renderer: {
+      promptProfile: "technology",
+    },
+    sources: [
+      "https://your-feed.example.com/rss.xml",
+      "https://another-feed.example.com/atom.xml",
+    ],
+  },
+},
+fetchGroups: {
+  default: ["auto"],
+},
+```
+
+先运行 `deno task article --dry-run`，确认当天产物里已经出现自定义 RSS 的文章，
+再继续接入正式发布链路。
+
 更多功能开关和必填项见 [配置说明](/configuration)。
 
 ## 4. 本地启动
