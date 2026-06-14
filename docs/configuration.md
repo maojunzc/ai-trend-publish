@@ -329,6 +329,26 @@ features: {
 FireCrawl；query 源默认推断到 Jina Search。`gdelt`、`hackernews`、`arxiv` 不需要
 API Key，适合免费补充新闻、技术社区和论文线索。
 
+如果你要直接接入自定义 RSS / Atom / JSON Feed，最小配置可以写成：
+
+```ts
+fetchGroups: {
+  default: ["auto"],
+},
+features: {
+  article: {
+    dryRun: true,
+    sources: [
+      "https://your-feed.example.com/rss.xml",
+      "https://another-feed.example.com/feed",
+    ],
+  },
+},
+```
+
+建议先执行一次 `deno task article --dry-run`，确认 run 产物里已经包含这些 RSS
+条目，再叠加 prompt profile、通知和正式发布配置。
+
 运行：
 
 ```bash
