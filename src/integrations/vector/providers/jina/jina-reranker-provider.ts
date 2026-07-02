@@ -6,7 +6,10 @@ import {
   RerankerProvider,
 } from "@src/core/ports/reranker.ts";
 import { HttpClient } from "@src/utils/http/http-client.ts";
+import { Logger } from "@zilla/logger";
 import { z } from "npm:zod@3.25.76";
+
+const logger = new Logger("JinaRerankerProvider");
 
 // Zod Schema for Jina Reranker API Request
 const JinaRerankerRequestSchema = z.object({
@@ -91,7 +94,7 @@ export class JinaRerankerProvider implements RerankerProvider {
       return_documents: returnDocumentsApiOption,
     });
 
-    console.info(
+    logger.info(
       `[JinaRerankerProvider] Reranking ${documents.length} documents for query "${
         query.substring(0, 50)
       }..." with model: ${model}`,
@@ -112,7 +115,7 @@ export class JinaRerankerProvider implements RerankerProvider {
       const parsedResult = JinaRerankerResponseSchema.safeParse(result);
 
       if (!parsedResult.success) {
-        console.error(
+        logger.error(
           `[JinaRerankerProvider] Invalid API response structure: ${parsedResult.error.toString()}`,
           result,
         );
@@ -123,8 +126,8 @@ export class JinaRerankerProvider implements RerankerProvider {
 
       const apiData = parsedResult.data;
 
-      if (!apiData.results) {
-        console.warn(
+if (!apiData.results) {
+        logger.warn(
           "[JinaRerankerProvider] API returned no results.",
           apiData,
         );
@@ -144,7 +147,7 @@ export class JinaRerankerProvider implements RerankerProvider {
           documentText = documents[res.index];
         } else {
           // This case should ideally not happen if API and input are valid.
-          console.warn(
+          logger.warn(
             `[JinaRerankerProvider] Document text not found for index ${res.index}. This might indicate an issue.`,
           );
         }
@@ -158,7 +161,7 @@ export class JinaRerankerProvider implements RerankerProvider {
 
       return rerankedDocs;
     } catch (error) {
-      console.error(
+      logger.error(
         `[JinaRerankerProvider] Error reranking documents for query "${
           query.substring(0, 50)
         }...":`,

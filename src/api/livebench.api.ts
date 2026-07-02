@@ -44,7 +44,7 @@ export class LiveBenchAPI {
     try {
       await this.llmProvider.refresh();
     } catch (error) {
-      console.error("刷新LLM提供者失败:", error);
+      logger.error("刷新LLM提供者失败:", error);
       throw new Error(`无法刷新LLM提供者: ${(error as Error).message}`);
     }
   }
@@ -70,7 +70,7 @@ export class LiveBenchAPI {
 
       const result = response.choices[0]?.message?.content;
       if (!result || typeof result !== "string") {
-        console.warn(
+        logger.warn(
           `Invalid response for model ${modelName}, returning Unknown`,
         );
         return "Unknown";
@@ -92,7 +92,7 @@ export class LiveBenchAPI {
       );
       this.categoryMapping = response.data;
     } catch (error) {
-      console.error("Error fetching categories:", error);
+      logger.error("Error fetching categories:", error);
       throw new Error("Failed to fetch LiveBench categories");
     }
   }
@@ -146,7 +146,7 @@ export class LiveBenchAPI {
 
       return modelScores;
     } catch (error) {
-      console.error("Error fetching scores:", error);
+      logger.error("Error fetching scores:", error);
       throw new Error("Failed to fetch LiveBench scores");
     }
   }

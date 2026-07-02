@@ -4,6 +4,7 @@ import {
   NetworkError,
   TimeoutError,
 } from "@src/utils/http/http-client.ts";
+import { Logger } from "@zilla/logger";
 import {
   ChatCompletionOptions,
   ChatCompletionResponse,
@@ -17,6 +18,8 @@ import {
   ProviderError,
 } from "@src/core/errors/provider-error.ts";
 import { redactSensitiveText } from "@src/utils/security/redact.ts";
+
+const logger = new Logger("OpenAICompatibleLLM");
 
 type LLMConfig = ResolvedTrendPublishConfig["providers"]["ai"];
 
@@ -84,13 +87,13 @@ export class OpenAICompatibleLLM implements LLMProvider {
    * @param model 模型名称
    */
   public setModel(model: string): void {
-    if (this.availableModels.includes(model)) {
-      this.defaultModel = model;
-    } else {
-      console.warn(
-        `警告: 模型 ${model} 不在可用模型列表中，将使用默认模型 ${this.defaultModel}`,
-      );
-    }
+if (this.availableModels.includes(model)) {
+            this.defaultModel = model;
+          } else {
+            logger.warn(
+              `警告: 模型 ${model} 不在可用模型列表中，将使用默认模型 ${this.defaultModel}`,
+            );
+          }
   }
 
   /**

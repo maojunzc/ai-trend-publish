@@ -591,7 +591,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
     );
   } catch (error) {
-    console.error("请求处理错误:", error);
+    logger.error("请求处理错误:", error);
     return new Response(
       JSON.stringify({
         jsonrpc: "2.0",

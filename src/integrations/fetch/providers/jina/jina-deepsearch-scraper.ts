@@ -7,7 +7,10 @@ import {
   // Media, // Media is unlikely to be directly from deepsearch text results
 } from "@src/core/ports/content-scraper.ts";
 import { HttpClient } from "@src/utils/http/http-client.ts";
+import { Logger } from "@zilla/logger";
 import { z } from "npm:zod@3.25.76";
+
+const logger = new Logger("JinaDeepSearchScraper");
 
 // Zod Schema for Jina DeepSearch API Request (minimal)
 const DeepSearchRequestSchema = z.object({
@@ -115,7 +118,7 @@ export class JinaDeepSearchScraper implements ContentScraper {
     options?: ScraperOptions, // Options might be used for model selection, etc.
   ): Promise<ScrapedContent[]> {
     await this.refresh();
-    console.info(
+    logger.info(
       `[JinaDeepSearchScraper] Searching with query: ${sourceId} with options: ${
         JSON.stringify(options)
       }`,
@@ -148,7 +151,7 @@ export class JinaDeepSearchScraper implements ContentScraper {
       const parsedResult = DeepSearchResponseSchema.safeParse(result);
 
       if (!parsedResult.success) {
-        console.error(
+        logger.error(
           `[JinaDeepSearchScraper] Invalid API response structure: ${parsedResult.error.toString()}`,
           result,
         );
@@ -160,7 +163,7 @@ export class JinaDeepSearchScraper implements ContentScraper {
       const apiData = parsedResult.data;
 
       if (!apiData.choices || apiData.choices.length === 0) {
-        console.warn(
+        logger.warn(
           "[JinaDeepSearchScraper] API returned no choices.",
           apiData,
         );
@@ -200,7 +203,7 @@ export class JinaDeepSearchScraper implements ContentScraper {
 
       return [scrapedContent];
     } catch (error) {
-      console.error(
+      logger.error(
         `[JinaDeepSearchScraper] Error processing query "${sourceId}":`,
         error,
       );

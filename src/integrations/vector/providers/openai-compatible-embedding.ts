@@ -5,6 +5,9 @@ import {
 } from "@src/core/ports/embedding.ts";
 import { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import OpenAI from "npm:openai@4.87.3";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("OpenAICompatibleEmbedding");
 
 type EmbeddingConfig =
   ResolvedTrendPublishConfig["providers"]["vector"]["embedding"];
@@ -50,7 +53,7 @@ export class OpenAICompatibleEmbedding implements EmbeddingProvider {
       this.defaultModel = model;
       return;
     }
-    console.warn(
+    logger.warn(
       `警告: 模型 ${model} 不在可用模型列表中，将使用默认模型 ${this.defaultModel}`,
     );
   }

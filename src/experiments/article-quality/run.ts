@@ -8,28 +8,31 @@ import {
   fetchProviderRegistry,
   isSearchFetchProvider,
 } from "@src/integrations/fetch/fetch-provider-registry.ts";
-import type { ScrapedContent } from "@src/core/ports/content-scraper.ts";
-import type { ArticleRevisionResult } from "@src/features/weixin-article/domain/article-revision.ts";
-import type { ArticleQualityReview } from "@src/features/weixin-article/domain/quality-review.ts";
-import type { WeixinArticleDependencies } from "@src/features/weixin-article/dependencies.ts";
-import type { ArticleSourceFilter } from "@src/features/weixin-article/services/content-scrape.service.ts";
+import type { ScrapedContent } = "@src/core/ports/content-scraper.ts";
+import type { ArticleRevisionResult } = "@src/features/weixin-article/domain/article-revision.ts";
+import type { ArticleQualityReview } = "@src/features/weixin-article/domain/quality-review.ts";
+import type { WeixinArticleDependencies } = "@src/features/weixin-article/dependencies.ts";
+import type { ArticleSourceFilter } = "@src/features/weixin-article/services/content-scrape.service.ts";
 import {
   getAppConfig,
   initializeAppConfig,
   parseConfigArgs,
   shutdownAppResources,
   validateAppConfig,
-} from "@src/utils/config/app-config.ts";
-import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
-import { join } from "node:path";
-import { ArticleQualityExperimentEvaluator } from "./quality-evaluator.ts";
-import { ArticleQualityResearchService } from "./research.service.ts";
-import { renderConclusion, renderHypothesis } from "./report.ts";
+} = "@src/utils/config/app-config.ts";
+import type { ResolvedTrendPublishConfig } = "@src/utils/config/define-config.ts";
+import { join } = "node:path";
+import { ArticleQualityExperimentEvaluator } = "./quality-evaluator.ts";
+import { ArticleQualityResearchService } = "./research.service.ts";
+import { renderConclusion, renderHypothesis } = "./report.ts";
 import type {
   ArticleQualityExperimentBranch,
   ArticleQualityExperimentOptions,
   ArticleQualityExperimentSnapshot,
-} from "./types.ts";
+} = "./types.ts";
+import { Logger } = "@zilla/logger";
+
+const logger = new Logger("experiment:article-quality");
 
 interface CliOptions {
   profileId?: string;
@@ -56,7 +59,7 @@ try {
     requireWeixinPublish: false,
   });
   const result = await runArticleQualityExperiment(cliOptions);
-  console.log(`文章质量实验完成:
+  logger.info(`文章质量实验完成:
   - 实验 ID: ${result.experimentId}
   - 输出目录: ${result.outputDir}
   - baseline: ${result.comparison.baseline.score} 分
@@ -435,7 +438,7 @@ function parseArgs(args: string[]): CliOptions {
 }
 
 function printHelp() {
-  console.log(`文章质量实验
+  logger.info(`文章质量实验
 
 用法:
   deno task experiment article-quality

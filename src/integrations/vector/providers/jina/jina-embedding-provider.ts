@@ -6,7 +6,10 @@ import {
   EmbeddingResult,
 } from "@src/core/ports/embedding.ts";
 import { HttpClient } from "@src/utils/http/http-client.ts";
+import { Logger } from "@zilla/logger";
 import { z } from "npm:zod@3.25.76";
+
+const logger = new Logger("JinaEmbeddingProvider");
 
 // Zod Schema for Jina Embeddings API Request
 const JinaEmbeddingRequestSchema = z.object({
@@ -85,7 +88,7 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
       // It's usually tied to the model choice itself or specific newer models.
     });
 
-    console.info(
+    logger.info(
       `[JinaEmbeddingProvider] Creating embedding for text (first 50 chars): "${
         text.substring(0, 50)
       }..." with model: ${model}`,
@@ -106,7 +109,7 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
       const parsedResult = JinaEmbeddingResponseSchema.safeParse(result);
 
       if (!parsedResult.success) {
-        console.error(
+        logger.error(
           `[JinaEmbeddingProvider] Invalid API response structure: ${parsedResult.error.toString()}`,
           result,
         );
@@ -118,13 +121,14 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
       const apiData = parsedResult.data;
 
       if (
-        !apiData.data || apiData.data.length === 0 || !apiData.data[0].embedding
-      ) {
-        console.warn(
-          "[JinaEmbeddingProvider] API returned no embedding data.",
-          apiData,
-        );
-        throw new Error("Jina Embeddings API returned no embedding data.");
+      !apiData.data || apiData.data.length === 0 || !apiData.data[0].embedding
+    ) {
+      logger.warn(
+        "[JinaEmbeddingProvider] API returned no embedding data.",
+        apiData,
+      );
+      throw new Error("Jina Embeddings API returned no embedding data.");
+    }
       }
 
       const embeddingData = apiData.data[0]; // Since we send one text, we expect one embedding object
@@ -135,7 +139,7 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
         dimensions: embeddingData.embedding.length, // Derived from the embedding vector
       };
     } catch (error) {
-      console.error(
+      logger.error(
         `[JinaEmbeddingProvider] Error creating embedding for text "${
           text.substring(0, 50)
         }...":`,

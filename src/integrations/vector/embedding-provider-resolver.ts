@@ -6,6 +6,9 @@ import {
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import { OpenAICompatibleEmbedding } from "@src/integrations/vector/providers/openai-compatible-embedding.ts";
 import { JinaEmbeddingProvider } from "@src/integrations/vector/providers/jina/jina-embedding-provider.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("EmbeddingProviderResolver");
 
 export interface EmbeddingProviderTypeMap {
   [EmbeddingProviderType.OPENAI]: OpenAICompatibleEmbedding;
@@ -95,7 +98,7 @@ export class EmbeddingProviderResolver {
       this.providers.set(cacheKey, provider);
       return provider as EmbeddingProviderTypeMap[T["providerType"]];
     } catch (error) {
-      console.error(`初始化 Embedding Provider 失败 [${cacheKey}]:`, error);
+      logger.error(`初始化 Embedding Provider 失败 [${cacheKey}]:`, error);
       throw new Error(
         `无法初始化 Embedding Provider [${cacheKey}]: ${
           error instanceof Error ? error.message : String(error)

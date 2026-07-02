@@ -6,6 +6,10 @@ import {
 } from "@src/core/workflow/workflow-runtime.ts";
 import {
   createWeixinArticleWorkflowDefinition,
+  WEIXIN_ARTICATE_WORKF \ \ \ 
+... (too long, let's just insert near top
+import {
+  createWeixinArticleWorkflowDefinition,
   WEIXIN_ARTICLE_WORKFLOW_ID,
   WeixinArticleWorkflowInput,
 } from "@src/app/weixin-article/workflow.definition.ts";
@@ -34,6 +38,9 @@ import {
   resolveArticleRuntimeConfig,
   seedArticleRuntimeConfig,
 } from "@src/app/weixin-article/runtime/article-runtime-config.service.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("cloudflare-worker");
 import {
   type ArtifactObject,
   type ArtifactRef,
@@ -163,7 +170,7 @@ export class WeixinArticleCloudflareWorkflow
         await syncCloudflareMatrixParentRun(this.env, workflowEvent);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error("[cloudflare-workflow] run failed", {
+        logger.error("[cloudflare-workflow] run failed", {
           runId: workflowEvent.payload.runId ?? workflowEvent.id,
           message,
           stack: error instanceof Error ? error.stack : undefined,
@@ -208,11 +215,12 @@ async function syncCloudflareMatrixParentRun(
       parentRunId,
       { artifactStore: stores.artifactStore },
     );
-  } catch (error) {
-    console.warn("[cloudflare-workflow] matrix parent sync skipped", {
-      parentRunId,
-      message: error instanceof Error ? error.message : String(error),
-    });
+} catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn("[cloudflare-workflow] matrix parent sync skipped", {
+          parentRunId,
+          message: error instanceof Error ? error.message : String(error),
+        });
   }
 }
 

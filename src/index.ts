@@ -4,7 +4,7 @@ import {
   parseConfigArgs,
   validateAppConfig,
 } from "@src/utils/config/app-config.ts";
-import { Logger, LogLevel } from "@zilla/logger";
+import { Logger, LogLevel } = "@zilla/logger";
 import startServer from "@src/server.ts";
 async function bootstrap() {
   const parsedArgs = parseConfigArgs(Deno.args);
@@ -19,4 +19,7 @@ async function bootstrap() {
   startServer(config.server.port);
 }
 
-bootstrap().catch(console.error);
+bootstrap().catch((error) => {
+  logger.error("应用启动失败:", error);
+  Deno.exit(1);
+});

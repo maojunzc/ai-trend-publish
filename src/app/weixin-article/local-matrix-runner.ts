@@ -13,6 +13,9 @@ import type {
 import type { ResolvedTrendPublishConfig } from "@src/utils/config/define-config.ts";
 import type { ArticleSourceFilter } from "@src/features/weixin-article/services/content-scrape.service.ts";
 import type { WeixinArticleWorkflowInput } from "@src/app/weixin-article/workflow.definition.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("local-matrix-runner");
 
 export interface LocalMatrixRuntimeStores {
   runtimeConfigStore: RuntimeConfigStore;
@@ -117,13 +120,13 @@ export async function runLocalWeixinArticleMatrixDryRun(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await stores.runStateStore.failRun(runId, message).catch(() => {});
-      console.warn(`[矩阵运行] 账号 ${accountId} 执行失败: ${message}`);
+      logger.warn(`[矩阵运行] 账号 ${accountId} 执行失败: ${message}`);
     } finally {
       await syncMatrixParentRun(stores.runStateStore, matrixRunId, {
         artifactStore: stores.artifactStore,
       }).catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[矩阵运行] 父批次状态同步失败: ${message}`);
+        logger.warn(`[矩阵运行] 父批次状态同步失败: ${message}`);
       });
     }
   }

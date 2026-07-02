@@ -11,6 +11,9 @@ import type {
   CloudflareKvNamespace,
 } from "@src/platform/cloudflare/cloudflare-bindings.ts";
 import { ARTICLE_WORKFLOW_SCHEMA_SQL } from "@src/core/storage/article-workflow-schema.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("kv-d1-run-state-store");
 
 export class KvD1RunStateStore implements RunStateStore {
   private schemaReady = false;
@@ -192,7 +195,7 @@ export class KvD1RunStateStore implements RunStateStore {
       await this.kv.put(`run:${record.runId}`, JSON.stringify(record));
       await this.kv.put("runs:latest", JSON.stringify(record));
     } catch (error) {
-      console.warn("[cloudflare-run-state] KV cache write skipped", {
+      logger.warn("[cloudflare-run-state] KV cache write skipped", {
         runId: record.runId,
         message: error instanceof Error ? error.message : String(error),
       });

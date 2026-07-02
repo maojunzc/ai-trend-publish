@@ -8,6 +8,9 @@ import { TextLogoGenerator } from "@src/integrations/image/providers/text-logo-g
 import { AliyunImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-image-generator.ts";
 import { AliyunPosterImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-poster-image-generator.ts";
 import { MiniMaxImageGenerator } from "@src/integrations/image/providers/minimax/minimax-image-generator.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("image-generator-resolver");
 
 export interface ImageGeneratorTypeMap {
   [ImageGeneratorType.TEXT_LOGO]: TextLogoGenerator;
@@ -64,7 +67,7 @@ export class ImageGeneratorResolver {
     for (const [type, generator] of this.generators.entries()) {
       refreshPromises.push(
         generator.refresh().catch((error) => {
-          console.error(`刷新图片生成器配置失败 [${type}]:`, error);
+          logger.error(`刷新图片生成器配置失败 [${type}]:`, error);
         }),
       );
     }

@@ -43,7 +43,7 @@ export class BarkNotifier implements INotifier {
     try {
       await this.refresh();
       if (!this.barkUrl) {
-        console.warn("Bark URL not configured, skipping notification");
+        logger.warn("Bark URL not configured, skipping notification");
         return false;
       }
 
@@ -86,10 +86,10 @@ export class BarkNotifier implements INotifier {
         return true;
       }
 
-      console.error("Bark 通知发送失败:", response.data);
+      logger.error("Bark 通知发送失败:", response.data);
       return false;
     } catch (error) {
-      console.error("Bark 通知发送出错:", error);
+      logger.error("Bark 通知发送出错:", error);
       return false;
     }
   }

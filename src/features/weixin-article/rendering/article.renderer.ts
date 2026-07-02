@@ -96,7 +96,7 @@ export class WeixinArticleTemplateRenderer
     template: string,
     context?: WeixinArticleRenderContext,
   ): Promise<string> {
-    console.log(
+    logger.info(
       `WeixinArticleTemplateRenderer doRender: ${data.length} articles`,
     );
     const processedData = await this.imageLayoutService.layoutArticles(data);

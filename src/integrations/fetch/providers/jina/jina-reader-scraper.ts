@@ -7,7 +7,10 @@ import {
   ScraperOptions,
 } from "@src/core/ports/content-scraper.ts";
 import { HttpClient } from "@src/utils/http/http-client.ts";
+import { Logger } from "@zilla/logger";
 import { z } from "npm:zod@3.25.76";
+
+const logger = new Logger("JinaReaderScraper");
 
 // Define a schema for the Jina API response for stricter parsing.
 const JinaResponseSchema = z.object({
@@ -57,7 +60,7 @@ export class JinaScraper implements ContentScraper {
     options?: ScraperOptions,
   ): Promise<ScrapedContent[]> {
     await this.refresh();
-    console.info(
+    logger.info(
       `[JinaScraper] Scraping URL: ${sourceId} with options: ${
         JSON.stringify(options)
       }`,
@@ -82,7 +85,7 @@ export class JinaScraper implements ContentScraper {
       const parsedResult = JinaResponseSchema.safeParse(result);
 
       if (!parsedResult.success) {
-        console.error(
+        logger.error(
           `[JinaScraper] Invalid API response structure: ${parsedResult.error.toString()}`,
           result,
         );
@@ -121,7 +124,7 @@ export class JinaScraper implements ContentScraper {
 
       return [scrapedContent]; // The interface expects an array
     } catch (error) {
-      console.error(`[JinaScraper] Error scraping ${sourceId}:`, error);
+      logger.error(`[JinaScraper] Error scraping ${sourceId}:`, error);
       // Optionally, re-throw or return an empty array or specific error structure
       if (error instanceof Error) {
         throw new Error(
