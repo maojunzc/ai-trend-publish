@@ -260,6 +260,8 @@ function createPublisher(
         config.providers.publish.weixin,
         accountId,
       );
+    default:
+      throw new Error(`未知的发布 provider: ${config.features.article.publisher.provider}`);
   }
 }
 
@@ -291,6 +293,8 @@ function resolveImageGeneratorType(
         : ImageGeneratorType.ALIYUN_IMAGE;
     case "minimax":
       return ImageGeneratorType.MINIMAX_IMAGE;
+    default:
+      throw new Error(`未知的图片生成 provider: ${provider}`);
   }
 }
 
@@ -302,5 +306,7 @@ function resolveEmbeddingProviderType(
   switch (provider) {
     case "dashscope":
       return EmbeddingProviderType.DASHSCOPE;
+    default:
+      throw new Error(`未知的 Embedding provider: ${provider}`);
   }
 }

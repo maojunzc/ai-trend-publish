@@ -104,6 +104,8 @@ function createNotifier(
       return new DingdingNotify(config.providers.notify.dingtalk);
     case "feishu":
       return new FeishuNotifier(config.providers.notify.feishu);
+    default:
+      throw new Error(`未知的通知渠道: ${channel}`);
   }
 }
 

@@ -20,6 +20,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
+  const logger = new Logger("bootstrap");
   logger.error("应用启动失败:", error);
   Deno.exit(1);
 });
