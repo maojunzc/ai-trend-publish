@@ -81,8 +81,10 @@ export class WeixinArticleContentProcessService {
 
     // 过滤出成功的文章
     const processedContents = settledResults
-      .filter((r): r is { success: true; content: ScrapedContent } => r.success === true)
-      .map((r) => r.content);
+      .filter((r): r is PromiseFulfilledResult<{ success: true; content: ScrapedContent }> =>
+        r.status === "fulfilled" && r.value.success === true
+      )
+      .map((r) => r.value.content);
 
     return processedContents;
   }
