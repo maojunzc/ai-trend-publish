@@ -61,7 +61,6 @@ export class WeixinArticleContentProcessService {
       clear: true,
       display: ":title | :percent | :completed/:total | :time \n",
     });
-    let processCompleted = 0;
 
     const settledResults = await Promise.allSettled(
       topContents.map(async (content, idx) => {

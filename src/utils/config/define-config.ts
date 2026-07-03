@@ -1036,7 +1036,7 @@ function defaultArticleImageModel(
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number) {
-  if (!Number.isFinite(value) || value === undefined) {
+  if (!Number.isFinite(value)) {
     return fallback;
   }
   return Math.max(1, Math.floor(value));
