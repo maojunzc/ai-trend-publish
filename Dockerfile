@@ -18,6 +18,8 @@ COPY wrangler.jsonc ./wrangler.jsonc
 
 RUN deno run --config dashboard/deno.json -A npm:vite@8.0.13 build --config dashboard/vite.config.ts
 RUN deno cache src/index.ts src/apps/weixin-relay/server.ts scripts/run.workflow.ts scripts/doctor.ts scripts/preview.weixin.ts
+# 预热 SQLite 原生插件（Deno 运行时会动态下载）
+RUN deno eval "import { Database } from '@db/sqlite'; new Database(':memory:').close();" 2>/dev/null || true
 RUN mkdir -p /app/config /app/src/temp \
   && ln -s /app/src /app/config/src \
   && chown -R deno:deno /app /deno-dir
@@ -26,4 +28,4 @@ USER deno
 
 EXPOSE 8000
 
-CMD ["deno", "task", "dev"]
+CMD ["deno", "run", "-A", "src/index.ts"]
