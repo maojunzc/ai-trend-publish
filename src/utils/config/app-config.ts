@@ -122,7 +122,11 @@ export async function validateAppConfig(
 }
 
 export async function shutdownAppResources(): Promise<void> {
-  await Promise.resolve();
+  // 清理 Logger 的观察者，关闭数据库连接等
+  const { clearLoggerObservers } = await import(
+    "@src/core/logger/logger.ts"
+  );
+  clearLoggerObservers();
 }
 
 export function parseConfigArgs(args: string[]): ParsedConfigArgs {

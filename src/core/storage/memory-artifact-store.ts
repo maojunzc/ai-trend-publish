@@ -13,6 +13,12 @@ import {
 
 export class MemoryArtifactStore implements ArtifactStore {
   private readonly objects = new Map<string, ArtifactObject>();
+  private readonly maxEntries: number;
+
+  // 默认最多保留 500 个 artifact，防止内存无限增长
+  constructor(maxEntries = 500) {
+    this.maxEntries = maxEntries;
+  }
 
   async putJson<T>(
     key: string,
@@ -58,6 +64,13 @@ export class MemoryArtifactStore implements ArtifactStore {
     options: PutArtifactOptions = {},
   ): Promise<ArtifactRef> {
     assertSafeArtifactKey(key);
+    // 达到上限时淘汰最旧的条目
+    if (this.objects.size >= this.maxEntries) {
+      const oldestKey = this.objects.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.objects.delete(oldestKey);
+      }
+    }
     const ref = createArtifactRef(
       "memory",
       key,

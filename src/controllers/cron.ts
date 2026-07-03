@@ -31,6 +31,7 @@ export const startCronJobs = async () => {
     "*/5 * * * *",
     async () => {
       try {
+        const config = await getAppConfig();
         logger.info("检查到期微信文章工作流...");
         const runtimeStores = createLocalArticleRuntimeStores(config);
         await seedArticleRuntimeConfig(

@@ -57,6 +57,7 @@ export class WeixinArticleContentDedupService {
 
     const contentEmbeddings = new Map<string, number[]>();
     const newVectors: NewVectorRecord[] = [];
+    const failedIndices = new Set<number>();
 
     logger.info("[向量计算] 开始批量计算内容向量");
     const embedProgress = new ProgressBar({
@@ -65,10 +66,9 @@ export class WeixinArticleContentDedupService {
       clear: true,
       display: ":title | :percent | :completed/:total | :time \n",
     });
-    let embedCompleted = 0;
 
     await Promise.all(
-      contents.map(async (content) => {
+      contents.map(async (content, idx) => {
         try {
           const embedding = await this.embeddingModel.createEmbedding(
             content.content,
@@ -85,15 +85,20 @@ export class WeixinArticleContentDedupService {
             `[向量计算] 计算内容 ${content.id} 的向量失败:`,
             error,
           );
+          // 记录失败的索引，后续跳过该内容
+          failedIndices.add(idx);
         }
-        await embedProgress.render(++embedCompleted);
+        await embedProgress.render(idx + 1);
       }),
     );
 
     logger.info(`[向量计算] 完成 ${contentEmbeddings.size} 个内容的向量计算`);
 
     const deduplicatedContents: ScrapedContent[] = [];
-    for (const content of contents) {
+    for (const [idx, content] of contents.entries()) {
+      // 跳过向量计算失败的内容
+      if (failedIndices.has(idx)) continue;
+
       const contentVector = contentEmbeddings.get(content.id);
       if (!contentVector) continue;
 

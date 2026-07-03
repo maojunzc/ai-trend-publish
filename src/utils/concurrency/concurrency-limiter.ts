@@ -51,7 +51,8 @@ export async function runConcurrentTasks<T>(
     for (let i = 0; i < tasks.length; i++) {
       // 等待有空闲位置
       while (running.size >= options.maxConcurrent) {
-        await Promise.race(running);
+        const finished = await Promise.race(running);
+        running.delete(finished);
       }
 
       // 创建新任务

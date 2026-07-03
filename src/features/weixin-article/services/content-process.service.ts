@@ -63,15 +63,29 @@ export class WeixinArticleContentProcessService {
     });
     let processCompleted = 0;
 
-    await Promise.all(topContents.map(async (content) => {
-      await this.hydrateContent(content);
-      await this.processContent(content);
-      await processProgress.render(++processCompleted, {
-        title: `已处理: ${content.title?.slice(0, 5) || "无标题"}...`,
-      });
-    }));
+    const settledResults = await Promise.allSettled(
+      topContents.map(async (content, idx) => {
+        try {
+          await this.hydrateContent(content);
+          await this.processContent(content);
+          await processProgress.render(idx + 1, {
+            title: `已处理: ${content.title?.slice(0, 5) || "无标题"}...`,
+          });
+          return { success: true, content } as const;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error(`[内容处理] 处理文章失败: ${message}`);
+          return { success: false, error: message } as const;
+        }
+      }),
+    );
 
-    return topContents;
+    // 过滤出成功的文章
+    const processedContents = settledResults
+      .filter((r): r is { success: true; content: ScrapedContent } => r.success === true)
+      .map((r) => r.content);
+
+    return processedContents;
   }
 
   private pickTopContents(

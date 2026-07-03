@@ -119,7 +119,10 @@ export async function runLocalWeixinArticleMatrixDryRun(
       await (options.runChild ?? runLocalWorkflowChild)({ runId, payload });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await stores.runStateStore.failRun(runId, message).catch(() => {});
+      await stores.runStateStore.failRun(runId, message).catch((err) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        logger.error(`[矩阵运行] 记录失败状态到存储失败: ${errorMsg}`);
+      });
       logger.warn(`[矩阵运行] 账号 ${accountId} 执行失败: ${message}`);
     } finally {
       await syncMatrixParentRun(stores.runStateStore, matrixRunId, {

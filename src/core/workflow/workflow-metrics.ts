@@ -26,13 +26,37 @@ export interface WorkflowMetric {
 export class MetricsCollector {
   // 两层Map: workflowId -> eventId -> WorkflowMetric
   private metrics: Map<string, Map<string, WorkflowMetric>> = new Map();
+  private readonly maxEventsPerWorkflow: number;
+  private readonly maxWorkflows: number;
+
+  constructor(
+    maxEventsPerWorkflow = 100,
+    maxWorkflows = 20,
+  ) {
+    this.maxEventsPerWorkflow = maxEventsPerWorkflow;
+    this.maxWorkflows = maxWorkflows;
+  }
 
   startWorkflow(workflowId: string, eventId: string): void {
     if (!this.metrics.has(workflowId)) {
+      // 限制 workflow 总数，超出时淘汰最旧的
+      if (this.metrics.size >= this.maxWorkflows) {
+        const oldestKey = this.metrics.keys().next().value;
+        if (oldestKey !== undefined) {
+          this.metrics.delete(oldestKey);
+        }
+      }
       this.metrics.set(workflowId, new Map());
     }
 
     const workflowMetrics = this.metrics.get(workflowId)!;
+    // 限制每个 workflow 的事件数，超出时淘汰最旧的
+    if (workflowMetrics.size >= this.maxEventsPerWorkflow) {
+      const oldestEvent = workflowMetrics.keys().next().value;
+      if (oldestEvent !== undefined) {
+        workflowMetrics.delete(oldestEvent);
+      }
+    }
     workflowMetrics.set(eventId, {
       eventId,
       startTime: Date.now(),

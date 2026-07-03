@@ -183,7 +183,9 @@ export class LocalJsonRunStateStore implements RunStateStore {
 
   private async writeState(state: RunStateFile): Promise<void> {
     await Deno.mkdir(dirname(this.filePath), { recursive: true });
-    await Deno.writeTextFile(this.filePath, JSON.stringify(state, null, 2));
+    const tmpPath = this.filePath + ".tmp." + crypto.randomUUID();
+    await Deno.writeTextFile(tmpPath, JSON.stringify(state, null, 2));
+    await Deno.rename(tmpPath, this.filePath);
   }
 
   private findLatestStep(

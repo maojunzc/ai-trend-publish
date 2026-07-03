@@ -962,7 +962,10 @@ export class WeixinArticleWorkflow {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
-      await runStateStore.failRun(runId, message).catch(() => {});
+      await runStateStore.failRun(runId, message).catch((err) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        logger.error(`[工作流] 记录失败状态到存储失败: ${errorMsg}`);
+      });
 
       if (error instanceof WorkflowTerminateError) {
         await this.dependencies.notifier.warning("工作流终止", message);
