@@ -51,7 +51,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Save Docker image
-        run: docker save ai-trend-publish:latest | gzip > /tmp/ai-trend-publish.tar.gz
+        run: docker save ai-trend-publish:latest | gzip > /home/runner/work/ai-trend-publish.tar.gz
 
       - name: Copy image to server
         uses: appleboy/scp-action@v0.1.7
@@ -60,9 +60,10 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || '22' }}
-          source: /tmp/ai-trend-publish.tar.gz
+          source: /home/runner/work/ai-trend-publish.tar.gz
           target: /home/ubuntu/
-          strip_components: 2
+          strip_components: 0
+          overwrite: true
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.2.2
