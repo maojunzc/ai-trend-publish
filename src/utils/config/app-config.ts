@@ -215,6 +215,9 @@ async function loadAppConfig(
     if (explicit) {
       throw new ConfigurationError(`配置文件不存在: ${configPath}`);
     }
+    console.warn(
+      "[配置] 未找到 trendpublish.config.ts，将使用默认配置。请运行 deno task doctor 检查配置状态。",
+    );
     return resolveTrendPublishConfig({});
   }
 

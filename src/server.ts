@@ -19,6 +19,20 @@ import { Logger } from "@zilla/logger";
 
 const logger = new Logger("server");
 
+interface ApiError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+function apiError(code: string, message: string, details?: unknown): ApiError {
+  return { code, message, ...(details !== undefined ? { details } : {}) };
+}
+
+function jsonError(status: number, code: string, message: string, details?: unknown): Response {
+  return jsonResponse({ ok: false, error: apiError(code, message, details) }, status);
+}
+
 export interface JSONRPCRequest {
   jsonrpc: string;
   method: string;
@@ -131,15 +145,9 @@ async function verifyRequestAuth(req: Request): Promise<Response | null> {
     !authHeader || !authHeader.startsWith("Bearer ") ||
     authHeader.split(" ")[1] !== API_KEY
   ) {
-    return jsonResponse({
-      error: {
-        code: -32001,
-        message: "未授权的访问",
-        data: {
-          error: "缺少有效的 Authorization 请求头",
-        },
-      },
-    }, 401);
+    return jsonError(401, "UNAUTHORIZED", "未授权的访问", {
+      error: "缺少有效的 Authorization 请求头",
+    });
   }
   return null;
 }
@@ -174,12 +182,13 @@ async function handleHealthRequest(req: Request): Promise<Response> {
   }
 
   const ok = Object.values(checks).every((check) => check.ok);
+  // 健康检查始终返回 200，负载均衡器/监控系统不应因组件问题而触发 500 告警
   return jsonResponse({
     ok,
     mode: "local",
     timestamp: new Date().toISOString(),
     checks,
-  }, ok ? 200 : 500);
+  }, 200);
 }
 
 async function handleConfigSummaryRequest(req: Request): Promise<Response> {
@@ -230,13 +239,13 @@ async function handleRunsRequest(req: Request, pathname: string) {
       maxArticles?: number;
     };
     if (payload.dryRun === false) {
-      return jsonResponse({ error: "矩阵运行第一版只允许 dry-run" }, 400);
+      return jsonError(400, "MATRIX_DRY_ONLY", "矩阵运行第一版只允许 dry-run");
     }
     const accountIds = [...new Set(payload.accountIds ?? [])]
       .filter((id) => typeof id === "string" && id.trim())
       .map((id) => id.trim());
     if (accountIds.length === 0) {
-      return jsonResponse({ error: "请选择至少一个公众号账号" }, 400);
+      return jsonError(400, "MISSING_ACCOUNT_IDS", "请选择至少一个公众号账号");
     }
     const result = await runLocalWeixinArticleMatrixDryRun(config, stores, {
       accountIds,
@@ -294,7 +303,7 @@ async function handleRunsRequest(req: Request, pathname: string) {
       };
       const rating = normalizeFeedbackRating(payload.rating);
       if (!rating) {
-        return jsonResponse({ error: "rating 必须是 good / ok / bad" }, 400);
+        return jsonError(400, "INVALID_RATING", "rating 必须是 good / ok / bad");
       }
       const run = await stores.runStateStore.getRun(runId);
       const feedback = await stores.editorialMemoryStore.saveFeedback({
@@ -340,9 +349,10 @@ async function handleRunsRequest(req: Request, pathname: string) {
       };
       const action = normalizeTopicFeedbackAction(payload.action);
       if (!action) {
-        return jsonResponse(
-          { error: "action 必须是 lead / adopt / skip" },
+        return jsonError(
           400,
+          "INVALID_ACTION",
+          "action 必须是 lead / adopt / skip",
         );
       }
       const run = await stores.runStateStore.getRun(runId);
@@ -376,12 +386,12 @@ async function handleRunsRequest(req: Request, pathname: string) {
       decodeURIComponent(runMatch[1]),
     );
     if (!run) {
-      return jsonResponse({ error: "run 不存在" }, 404);
+      return jsonError(404, "RUN_NOT_FOUND", "run 不存在");
     }
     return jsonResponse({ run });
   }
 
-  return jsonResponse({ error: "无效的 runs API" }, 404);
+  return jsonError(404, "INVALID_RUNS_API", "无效的 runs API");
 }
 
 function normalizeFeedbackRating(
@@ -405,13 +415,13 @@ async function handleArtifactRequest(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const key = url.searchParams.get("key");
   if (!key) {
-    return jsonResponse({ error: "缺少 key 参数" }, 400);
+    return jsonError(400, "MISSING_KEY", "缺少 key 参数");
   }
   const config = await getAppConfig();
   const stores = createLocalArticleRuntimeStores(config);
   const object = await stores.artifactStore.getObject(key);
   if (!object) {
-    return jsonResponse({ error: "artifact 不存在" }, 404);
+    return jsonError(404, "ARTIFACT_NOT_FOUND", "artifact 不存在");
   }
   return new Response(
     toArrayBuffer(object.body),
@@ -618,10 +628,9 @@ export default async function startServer(port = 8000) {
   logger.info(`服务监听在 http://0.0.0.0:${port}`);
   logger.info("dashboard 地址: http://localhost:8000/dashboard");
   const config = await getAppConfig();
-  const masked = config.server.apiKey.length > 4
-    ? config.server.apiKey.slice(0, 4) + "****"
-    : "****";
-  logger.info("api key configured: " + masked);
+  if (config.server.apiKey) {
+    logger.info("api key: configured");
+  }
 
   const shutdown = () => {
     logger.info("正在关闭服务器...");
