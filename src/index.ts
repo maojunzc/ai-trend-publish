@@ -4,7 +4,7 @@ import {
   parseConfigArgs,
   validateAppConfig,
 } from "@src/utils/config/app-config.ts";
-import { Logger, LogLevel } = "@zilla/logger";
+import { Logger, LogLevel } from "@zilla/logger";
 import startServer from "@src/server.ts";
 async function bootstrap() {
   const parsedArgs = parseConfigArgs(Deno.args);
