@@ -6,7 +6,7 @@ ENV DENO_DIR=/deno-dir
 ENV TRENDPUBLISH_RUNTIME=docker
 ENV TRENDPUBLISH_CONFIG=/app/config/trendpublish.config.ts
 
-COPY deno.json deno.lock ./
+COPY deno.json ./
 COPY dashboard ./dashboard
 COPY src ./src
 COPY scripts ./scripts
