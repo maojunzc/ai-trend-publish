@@ -235,8 +235,6 @@ if (options.body_text && options.body_text.length > 50) {
         logger.warn(
           `lora_weight ${options.lora_weight} 超出范围[0-1]，将使用默认值 0.8`,
         );
-        options.lora_weight = 0.8`,
-        );
         options.lora_weight = 0.8;
       }
     }
