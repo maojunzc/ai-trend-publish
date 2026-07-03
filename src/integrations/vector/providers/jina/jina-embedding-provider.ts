@@ -121,14 +121,13 @@ export class JinaEmbeddingProvider implements EmbeddingProvider {
       const apiData = parsedResult.data;
 
       if (
-      !apiData.data || apiData.data.length === 0 || !apiData.data[0].embedding
-    ) {
-      logger.warn(
-        "[JinaEmbeddingProvider] API returned no embedding data.",
-        apiData,
-      );
-      throw new Error("Jina Embeddings API returned no embedding data.");
-    }
+        !apiData.data || apiData.data.length === 0 || !apiData.data[0].embedding
+      ) {
+        logger.warn(
+          "[JinaEmbeddingProvider] API returned no embedding data.",
+          apiData,
+        );
+        throw new Error("Jina Embeddings API returned no embedding data.");
       }
 
       const embeddingData = apiData.data[0]; // Since we send one text, we expect one embedding object
