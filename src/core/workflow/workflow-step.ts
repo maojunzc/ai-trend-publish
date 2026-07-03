@@ -52,7 +52,13 @@ export class WorkflowStep {
     const options: WorkflowStepOptions = typeof optionsOrFn === "function"
       ? {}
       : optionsOrFn;
-    const execFn = typeof optionsOrFn === "function" ? optionsOrFn : fn!;
+    const execFn = typeof optionsOrFn === "function"
+      ? optionsOrFn
+      : fn;
+
+    if (!execFn) {
+      throw new Error(`步骤 "${name}" 缺少执行函数：调用 do() 时需提供回调函数`);
+    }
     const stepStartTime = Date.now();
 
     try {

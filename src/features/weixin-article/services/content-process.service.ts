@@ -31,7 +31,7 @@ export class WeixinArticleContentProcessService {
     maxArticles?: number,
     selection?: ContentSelectionContext,
   ): Promise<ScrapedContent[]> {
-    const limit = maxArticles || this.defaultArticleCount;
+    const limit = maxArticles ?? this.defaultArticleCount;
 
     const topContents = this.pickTopContents(
       rankedContents,

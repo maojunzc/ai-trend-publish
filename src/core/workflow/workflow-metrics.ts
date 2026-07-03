@@ -112,6 +112,17 @@ export class MetricsCollector {
   private calculateStats(metric: WorkflowMetric) {
     const steps = metric.steps;
     const totalSteps = steps.length;
+    if (totalSteps === 0) {
+      return {
+        totalSteps: 0,
+        failedSteps: 0,
+        successRate: 100,
+        totalAttempts: 0,
+        avgAttemptsPerStep: 0,
+        avgStepDuration: 0,
+        totalDuration: metric.duration,
+      };
+    }
     const failedSteps = steps.filter((s) => s.status === "failure").length;
     const totalAttempts = steps.reduce((sum, s) => sum + s.attempts, 0);
     const avgDuration = steps.reduce((sum, s) => sum + s.duration, 0) /

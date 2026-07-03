@@ -614,7 +614,7 @@ const handler = async (req: Request): Promise<Response> => {
 };
 
 export default async function startServer(port = 8000) {
-  Deno.serve({ port }, handler);
+  const server = Deno.serve({ port }, handler);
   logger.info(`服务监听在 http://0.0.0.0:${port}`);
   logger.info("dashboard 地址: http://localhost:8000/dashboard");
   const config = await getAppConfig();
@@ -622,4 +622,15 @@ export default async function startServer(port = 8000) {
     ? config.server.apiKey.slice(0, 4) + "****"
     : "****";
   logger.info("api key configured: " + masked);
+
+  const shutdown = () => {
+    logger.info("正在关闭服务器...");
+    server.shutdown();
+  };
+
+  Deno.addSignalListener("SIGINT", () => shutdown());
+  Deno.addSignalListener("SIGTERM", () => shutdown());
+
+  await server.finished;
+  logger.info("服务器已安全关闭");
 }

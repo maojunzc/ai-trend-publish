@@ -382,20 +382,45 @@ function extractArticleLinks(content: ScrapedContent): ExtractedArticleLink[] {
 
   const links: ExtractedArticleLink[] = [];
   const seen = new Set<string>();
+
+  // Try markdown links first, fall back to HTML links if no markdown links found
   const markdownLinkPattern =
     /(?<!!)\[([^\]\n]{6,180})\]\((https?:\/\/[^)\s]+)\)/g;
-  for (const match of content.content.matchAll(markdownLinkPattern)) {
-    const title = sanitizeLinkTitle(match[1]);
-    const url = normalizeUrl(match[2]);
-    if (!title || !url || seen.has(url)) continue;
-    if (readHost(url) !== parentHost) continue;
-    if (isNoisyLinkTitle(title) || isStaticAssetUrl(url)) continue;
-    seen.add(url);
-    links.push({
-      title,
-      url,
-      publishDate: extractDateFromLinkTitle(title),
-    });
+  const htmlLinkPattern = /<a[^>]+href=["']?(https?:\/\/[^"'>\s]+)["']?[^>]*>([^<]+)<\/a>/gi;
+
+  let textToSearch = content.content;
+  const markdownMatches = Array.from(textToSearch.matchAll(markdownLinkPattern));
+
+  if (markdownMatches.length === 0) {
+    // Fall back to HTML links for non-markdown content
+    textToSearch = content.content;
+    for (const match of textToSearch.matchAll(htmlLinkPattern)) {
+      const url = normalizeUrl(match[1]);
+      const title = sanitizeLinkTitle(match[2].trim());
+      if (!title || !url || seen.has(url)) continue;
+      if (readHost(url) !== parentHost) continue;
+      if (isNoisyLinkTitle(title) || isStaticAssetUrl(url)) continue;
+      seen.add(url);
+      links.push({
+        title,
+        url,
+        publishDate: extractDateFromLinkTitle(title),
+      });
+    }
+  } else {
+    for (const match of markdownMatches) {
+      const title = sanitizeLinkTitle(match[1]);
+      const url = normalizeUrl(match[2]);
+      if (!title || !url || seen.has(url)) continue;
+      if (readHost(url) !== parentHost) continue;
+      if (isNoisyLinkTitle(title) || isStaticAssetUrl(url)) continue;
+      seen.add(url);
+      links.push({
+        title,
+        url,
+        publishDate: extractDateFromLinkTitle(title),
+      });
+    }
   }
 
   return links;
