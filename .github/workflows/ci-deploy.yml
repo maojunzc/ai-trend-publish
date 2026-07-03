@@ -1,0 +1,98 @@
+name: CI - Check & Deploy
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Deno Check & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.7.14
+
+      - name: Cache Dependencies
+        run: deno cache src/index.ts
+
+      - name: Type Check
+        run: deno check src/index.ts
+
+  deploy:
+    name: Deploy to Production
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    needs: [check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (production)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: ai-trend-publish:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save Docker image
+        run: docker save ai-trend-publish:latest | gzip > /tmp/ai-trend-publish.tar.gz
+
+      - name: Copy image to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || '22' }}
+          source: /tmp/ai-trend-publish.tar.gz
+          target: /home/ubuntu/
+          strip_components: 2
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || '22' }}
+          script: |
+            cd /home/ubuntu/ai-trend-publish
+            # Pull latest code for config/templates (not Docker image)
+            git pull origin master 2>/dev/null || echo "git pull skipped"
+
+            # Load new Docker image
+            docker load < /home/ubuntu/ai-trend-publish.tar.gz
+            rm -f /home/ubuntu/ai-trend-publish.tar.gz
+
+            # Restart container
+            docker stop ai-trend-publish 2>/dev/null || true
+            docker rm ai-trend-publish 2>/dev/null || true
+            docker run -d --name ai-trend-publish \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              --env-file /home/ubuntu/ai-trend-publish/.env \
+              -v /home/ubuntu/ai-trend-publish/config:/app/config \
+              ai-trend-publish:latest
+
+            # Clean old images
+            docker image prune -f
+
+            # Verify
+            sleep 5
+            curl -sf http://localhost:8000/api/health > /dev/null && echo "HEALTH_CHECK_OK" || echo "HEALTH_CHECK_FAILED"
