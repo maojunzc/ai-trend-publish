@@ -450,6 +450,7 @@ src/
 
 - **本地开发**：改代码、调 Dashboard、跑 dry-run。
 - **Docker 服务器**（推荐）：使用 GitHub Actions CI/CD 自动构建并部署。
+- **GitHub Actions 定时运行**（零成本）：不需要云服务器，直接在 GitHub 上定时跑文章工作流。
 - **Cloudflare Workflows**：适合 Serverless 定时运行，使用 Worker + Workflows + D1/KV/R2。
 
 ### 本地开发
@@ -514,6 +515,29 @@ git push origin master  # 自动触发 CI/CD
 ```
 
 CI/CD 流程定义在 [`.github/workflows/ci-deploy.yml`](.github/workflows/ci-deploy.yml)。
+
+### GitHub Actions 定时运行（零成本）
+
+不需要云服务器，GitHub Actions 免费额度可以定时跑文章生成。项目已配置好 `.github/workflows/scheduled-article.yml`，每天自动运行 4 次（北京时间 8点、14点、20点、次日 2点）：
+
+1. 在 GitHub 仓库 **Settings → Secrets and variables → Actions** 中添加以下 Secrets：
+
+| Secret | 说明 |
+|--------|------|
+| `SERVER_API_KEY` | 服务密钥 |
+| `AI_BASE_URL` | LLM API 地址 |
+| `AI_API_KEY` | LLM API 密钥 |
+| `AI_MODEL` | LLM 模型名 |
+| `ARTICLE_SOURCES` | 数据源列表，用逗号分隔 |
+| 其他可按需添加 | FireCrawl / Jina / 微信凭证等 |
+
+2. 点击仓库 **Actions → Scheduled Article Generation → Run workflow** 测试运行。
+
+3. 设置定时运行的配置项见 [`.github/workflows/scheduled-article.yml`](.github/workflows/scheduled-article.yml)。
+
+> **注意**：GitHub Actions 每次运行最长 6 小时，免费用户每月 2000 分钟。半小时内的文章工作流足够每天跑 4 次。
+>
+> dry-run 模式会把 HTML / JSON 产物存为 Actions Artifact（保留 7 天），可在运行详情页下载查看。
 
 Cloudflare 部署：
 

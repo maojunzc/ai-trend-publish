@@ -1,0 +1,128 @@
+name: Scheduled Article Generation
+
+on:
+  schedule:
+    # 每天 UTC 0点、6点、12点、18点（北京时间 8点、14点、20点、次日2点）
+    - cron: "0 0,6,12,18 * * *"
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Dry-run 模式（不上传不发布）"
+        type: boolean
+        default: true
+      maxArticles:
+        description: "文章数量限制"
+        type: number
+        default: 10
+      sourceType:
+        description: "抓取 provider 限制"
+        type: string
+        default: ""
+
+jobs:
+  generate:
+    name: Run Article Workflow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.7.14
+
+      - name: Cache Dependencies
+        run: deno cache src/index.ts scripts/run.workflow.ts
+
+      - name: Create config file
+        run: |
+          mkdir -p config
+          cat > config/trendpublish.config.ts << 'CONFIGEOF'
+          import { defineConfig } from "@src/utils/config/define-config.ts";
+
+          export default defineConfig({
+            server: {
+              apiKey: "${{ secrets.SERVER_API_KEY }}",
+            },
+            providers: {
+              ai: {
+                baseUrl: "${{ secrets.AI_BASE_URL }}",
+                apiKey: "${{ secrets.AI_API_KEY }}",
+                model: "${{ secrets.AI_MODEL }}",
+              },
+              fetch: {
+                firecrawl: { apiKey: "${{ secrets.FIRECRAWL_API_KEY }}" },
+                jina: { apiKey: "${{ secrets.JINA_API_KEY }}" },
+                brave: { apiKey: "${{ secrets.BRAVE_API_KEY }}" },
+                twitter: {
+                  bearerToken: "${{ secrets.TWITTER_BEARER_TOKEN }}",
+                  xquikApiKey: "${{ secrets.XQUIK_API_KEY }}",
+                },
+              },
+              image: {
+                dashscope: { apiKey: "${{ secrets.DASHSCOPE_API_KEY }}" },
+                minimax: { apiKey: "${{ secrets.MINIMAX_API_KEY }}" },
+              },
+              publish: {
+                weixin: {
+                  appId: "${{ secrets.WEIXIN_APP_ID }}",
+                  appSecret: "${{ secrets.WEIXIN_APP_SECRET }}",
+                },
+                weixinRelay: {
+                  url: "${{ secrets.WEIXIN_RELAY_URL }}",
+                  token: "${{ secrets.WEIXIN_RELAY_TOKEN }}",
+                },
+              },
+              notify: {
+                bark: { url: "${{ secrets.BARK_URL }}" },
+              },
+              vector: {
+                embedding: {
+                  baseUrl: "${{ secrets.EMBEDDING_BASE_URL }}",
+                  apiKey: "${{ secrets.EMBEDDING_API_KEY }}",
+                  model: "${{ secrets.EMBEDDING_MODEL }}",
+                },
+              },
+            },
+            features: {
+              article: {
+                dryRun: ${{ github.event.inputs.dryRun != 'false' }},
+                template: "${{ secrets.ARTICLE_TEMPLATE || 'minimal' }}",
+                promptProfile: "${{ secrets.ARTICLE_PROMPT_PROFILE || 'technology' }}",
+                sources: "${{ secrets.ARTICLE_SOURCES }}".split(",").map(s => s.trim()).filter(Boolean),
+                renderer: {
+                  template: "${{ secrets.ARTICLE_TEMPLATE || 'dynamic' }}",
+                  promptProfile: "${{ secrets.ARTICLE_PROMPT_PROFILE || 'technology' }}",
+                },
+                notifications: {
+                  channels: "${{ secrets.NOTIFY_CHANNELS }}".split(",").map(s => s.trim()).filter(Boolean),
+                },
+              },
+            },
+            storage: {
+              artifacts: { provider: "local", outputDir: "src/temp" },
+              runState: { provider: "local-json", outputDir: "src/temp" },
+              vector: { provider: "sqlite", sqlitePath: "src/temp/trendpublish.sqlite3" },
+            },
+          });
+          CONFIGEOF
+          ls -la config/trendpublish.config.ts
+
+      - name: Run article workflow
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.dryRun }}" != "false" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "${{ github.event.inputs.maxArticles }}" ]; then ARGS="$ARGS --max-articles ${{ github.event.inputs.maxArticles }}"; fi
+          if [ -n "${{ github.event.inputs.sourceType }}" ]; then ARGS="$ARGS --source ${{ github.event.inputs.sourceType }}"; fi
+          deno run -A scripts/run.workflow.ts $ARGS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: article-output-${{ github.run_id }}
+          path: |
+            src/temp/
+            !src/temp/.gitkeep
+          retention-days: 7
