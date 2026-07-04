@@ -37,8 +37,7 @@ jobs:
 
       - name: Create config file
         run: |
-          mkdir -p config
-          cat > config/trendpublish.config.ts << 'CONFIGEOF'
+          cat > trendpublish.config.ts << 'CONFIGEOF'
           import { defineConfig } from "@src/utils/config/define-config.ts";
 
           export default defineConfig({
@@ -113,7 +112,7 @@ jobs:
             },
           });
           CONFIGEOF
-          ls -la config/trendpublish.config.ts
+          ls -la trendpublish.config.ts
 
       - name: Run article workflow
         run: |
