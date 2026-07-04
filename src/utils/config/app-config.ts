@@ -9,6 +9,9 @@ import {
   TrendPublishConfigSource,
 } from "@src/utils/config/define-config.ts";
 import { configureLoggerObservability } from "@src/core/logger/configure-logger-observability.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("config");
 
 export class ConfigurationError extends Error {
   constructor(message: string) {
@@ -215,7 +218,7 @@ async function loadAppConfig(
     if (explicit) {
       throw new ConfigurationError(`配置文件不存在: ${configPath}`);
     }
-    console.warn(
+    logger.warn(
       "[配置] 未找到 trendpublish.config.ts，将使用默认配置。请运行 deno task doctor 检查配置状态。",
     );
     return resolveTrendPublishConfig({});
