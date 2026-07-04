@@ -47,9 +47,9 @@ jobs:
             },
             providers: {
               ai: {
-                baseUrl: "${{ secrets.AI_BASE_URL }}",
-                apiKey: "${{ secrets.AI_API_KEY }}",
-                model: "${{ secrets.AI_MODEL }}",
+                baseUrl: "${{ secrets.AI_BASE_URL || 'https://api.deepseek.com/v1' }}",
+                apiKey: "${{ secrets.AI_API_KEY || '' }}",
+                model: "${{ secrets.AI_MODEL || 'deepseek-chat' }}",
               },
               fetch: {
                 firecrawl: { apiKey: "${{ secrets.FIRECRAWL_API_KEY }}" },
@@ -88,15 +88,21 @@ jobs:
             features: {
               article: {
                 dryRun: ${{ github.event.inputs.dryRun != 'false' }},
-                template: "${{ secrets.ARTICLE_TEMPLATE || 'minimal' }}",
-                promptProfile: "${{ secrets.ARTICLE_PROMPT_PROFILE || 'technology' }}",
-                sources: "${{ secrets.ARTICLE_SOURCES }}".split(",").map(s => s.trim()).filter(Boolean),
+                template: "minimal",
+                promptProfile: "technology",
+                sources: (() => {
+                  const raw = "${{ secrets.ARTICLE_SOURCES }}";
+                  return raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : ["https://news.ycombinator.com/"];
+                })(),
                 renderer: {
-                  template: "${{ secrets.ARTICLE_TEMPLATE || 'dynamic' }}",
-                  promptProfile: "${{ secrets.ARTICLE_PROMPT_PROFILE || 'technology' }}",
+                  template: "dynamic",
+                  promptProfile: "technology",
                 },
                 notifications: {
-                  channels: "${{ secrets.NOTIFY_CHANNELS }}".split(",").map(s => s.trim()).filter(Boolean),
+                  channels: (() => {
+                    const raw = "${{ secrets.NOTIFY_CHANNELS }}";
+                    return raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
+                  })(),
                 },
               },
             },
