@@ -444,14 +444,15 @@ src/
 
 ## 发布与部署
 
+### 部署方式
+
 部署时先选一种形态：
 
 - **本地开发**：改代码、调 Dashboard、跑 dry-run。
-- **Docker 服务器**：推荐给大多数自部署用户，使用 GHCR 镜像和挂载配置。
-- **Cloudflare Workflows**：适合 Serverless 定时运行，使用 Worker + Workflows +
-  D1/KV/R2。
+- **Docker 服务器**（推荐）：使用 GitHub Actions CI/CD 自动构建并部署。
+- **Cloudflare Workflows**：适合 Serverless 定时运行，使用 Worker + Workflows + D1/KV/R2。
 
-本地开发：
+### 本地开发
 
 ```bash
 cp trendpublish.config.example.ts trendpublish.config.ts
@@ -459,7 +460,7 @@ deno task doctor
 deno task dev
 ```
 
-Docker 部署：
+### Docker 部署（手动）
 
 ```bash
 mkdir -p config data/temp
@@ -469,6 +470,50 @@ deno task docker
 
 Docker 默认使用 `ghcr.io/maojunzc/ai-trend-publish:latest`，配置挂载到
 `/app/config/trendpublish.config.ts`，运行产物挂载到 `/app/src/temp`。
+
+### Docker 部署（自动 CI/CD）
+
+项目已配置 GitHub Actions，每次推送代码到 `master` 分支时会自动构建并部署到生产服务器：
+
+1. 在 GitHub 仓库设置中添加以下 Secrets：
+
+| Secret | 说明 |
+|--------|------|
+| `DEPLOY_HOST` | 服务器 IP 地址 |
+| `DEPLOY_USER` | SSH 用户名 |
+| `DEPLOY_PORT` | SSH 端口（默认 22） |
+| `DEPLOY_SSH_KEY` | SSH 私钥内容（与服务器公钥配对） |
+
+2. 在服务器上准备部署环境：
+
+```bash
+# 创建项目目录
+mkdir -p /home/ubuntu/ai-trend-publish/config
+
+# 复制配置文件
+cp trendpublish.config.docker.example.ts /home/ubuntu/ai-trend-publish/config/trendpublish.config.ts
+
+# 创建环境变量文件
+cat > /home/ubuntu/ai-trend-publish/.env << 'EOF'
+SERVER_API_KEY=your-server-api-key
+AI_BASE_URL=https://api.deepseek.com/v1
+AI_API_KEY=your-ai-api-key
+AI_MODEL=deepseek-chat
+EOF
+```
+
+3. 此后每次推送代码，GitHub Actions 会自动：
+   - 运行 `deno check` 类型检查
+   - 构建 Docker 镜像
+   - 通过 SCP 将镜像传输到服务器
+   - 加载新镜像并重启容器
+   - 执行健康检查验证
+
+```bash
+git push origin master  # 自动触发 CI/CD
+```
+
+CI/CD 流程定义在 [`.github/workflows/ci-deploy.yml`](.github/workflows/ci-deploy.yml)。
 
 Cloudflare 部署：
 
