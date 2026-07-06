@@ -98,7 +98,8 @@ export class HttpObservabilitySink implements ObservabilitySink {
 }
 
 function sanitizeEvent(event: ObservabilityEvent): ObservabilityEvent {
-  return JSON.parse(redactSensitiveText(event)) as ObservabilityEvent;
+  const redactedStr = redactSensitiveText(JSON.stringify(event));
+  return JSON.parse(redactedStr) as ObservabilityEvent;
 }
 
 function formatPayload(

@@ -8,7 +8,7 @@
 ## 2. 克隆项目
 
 ```bash
-git clone https://github.com/liyown/ai-trend-publish
+git clone https://github.com/maojunzc/ai-trend-publish
 cd ai-trend-publish
 ```
 

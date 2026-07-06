@@ -51,7 +51,7 @@ deno task verify              # 发布前完整验证
 Docker 推荐直接使用 GitHub Actions 发布到 GHCR 的镜像，不在服务器上构建：
 
 ```bash
-docker pull ghcr.io/liyown/ai-trend-publish:latest
+docker pull ghcr.io/maojunzc/ai-trend-publish:latest
 ```
 
 准备配置和数据目录：
@@ -73,7 +73,7 @@ deno task docker logs
 ```yaml
 services:
   trendpublish:
-    image: ghcr.io/liyown/ai-trend-publish:latest
+    image: ghcr.io/maojunzc/ai-trend-publish:latest
     ports:
       - "8000:8000"
     volumes:
@@ -348,7 +348,7 @@ curl http://<relay-host>:8080/health
 不想用 Docker 时可以源码运行：
 
 ```bash
-git clone https://github.com/liyown/ai-trend-publish.git
+git clone https://github.com/maojunzc/ai-trend-publish.git
 cd ai-trend-publish
 mkdir -p config
 cp trendpublish.config.example.ts config/trendpublish.config.ts

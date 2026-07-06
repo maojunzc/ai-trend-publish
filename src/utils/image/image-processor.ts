@@ -51,9 +51,10 @@ export class WeixinImageProcessor {
     maxSizeInMB: number = 1,
   ): Promise<Uint8Array> {
     try {
-      const { decode } = await import(
-        "https://deno.land/x/imagescript@1.2.17/mod.ts"
-      );
+      // ImageScript 用于图片压缩, import 方式由 deno.json 的 imports 管理。
+      // 若在浏览器/CF Worker 等无此库的环境运行,compressImage 会抛出异常,
+      // 由上层 catch 回退到原图上传。
+      const { decode } = await import("@imagescript");
       // 解码图片
       const bytes = imageBuffer instanceof Uint8Array
         ? imageBuffer

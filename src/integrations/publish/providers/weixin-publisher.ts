@@ -300,7 +300,14 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
    */
   async validateIpWhitelist(): Promise<string | boolean> {
     try {
-      await this.ensureAccessToken();
+      const token = await this.ensureAccessToken();
+      // 调用一次真实的微信 API 来验证 IP 白名单。
+      // 仅获取 access_token 不需要白名单，必须调业务 API 才能触发 IP 检查。
+      await this.apiClient.postJson<{ total_count: number; item: unknown[] }>(
+        "/cgi-bin/draft/batchget",
+        token,
+        { offset: 0, count: 1, no_content: 1 },
+      );
       return true;
     } catch (error) {
       if (error instanceof Error && error.message.includes("40164")) {

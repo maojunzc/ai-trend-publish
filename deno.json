@@ -25,6 +25,7 @@
     "@zilla/logger-upstream": "jsr:@zilla/logger@^1.0.1",
     "@sapling/markdown": "jsr:@sapling/markdown@^0.3.0",
     "@cliffy/command": "jsr:@cliffy/command@1.1.0",
+    "@imagescript": "https://deno.land/x/imagescript@1.2.17/mod.ts",
     "jsonrepair": "npm:jsonrepair@3",
     "vitepress": "npm:vitepress@1.6.4",
     "vue": "npm:vue@3.5.34"

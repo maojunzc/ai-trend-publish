@@ -1,6 +1,6 @@
 services:
   weixin-relay:
-    image: ghcr.io/liyown/ai-trend-publish:latest
+    image: ghcr.io/maojunzc/ai-trend-publish:latest
     container_name: trendpublish-weixin-relay
     restart: unless-stopped
     command: ["deno", "task", "relay"]

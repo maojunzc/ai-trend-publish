@@ -65,5 +65,5 @@ flowchart LR
 
 ## 相关链接
 
-- GitHub: [liyown/ai-trend-publish](https://github.com/liyown/ai-trend-publish)
+- GitHub: [maojunzc/ai-trend-publish](https://github.com/maojunzc/ai-trend-publish)
 - Discord: <https://discord.gg/mrZvBHNawS>

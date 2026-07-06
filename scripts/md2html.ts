@@ -8,7 +8,7 @@ interface DocEntry {
   path: string;
 }
 
-const BASE_URL = "https://liyown.github.io/ai-trend-publish";
+const BASE_URL = "https://maojunzc.github.io/ai-trend-publish";
 const DOCS_INDEX: DocEntry[] = [];
 
 // HTML 模板
