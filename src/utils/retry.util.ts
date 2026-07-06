@@ -13,6 +13,10 @@ export interface RetryOptions {
   baseDelay?: number;
   /** 是否使用指数退避策略 */
   useExponentialBackoff?: boolean;
+  /** 最大退避时间上限（毫秒），默认 30000 */
+  maxDelay?: number;
+  /** jitter 比例（0-1），默认 0.3 表示在[0.7*delay, 1.3*delay]间抖动 */
+  jitter?: number;
 }
 
 /**

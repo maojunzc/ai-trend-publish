@@ -127,10 +127,20 @@ rpcServer.registerRoute("triggerWorkflow", triggerWorkflow);
 async function verifyRequestAuth(req: Request): Promise<Response | null> {
   const API_KEY = (await getAppConfig()).server.apiKey;
   const authHeader = req.headers.get("Authorization");
-  if (
-    !authHeader || !authHeader.startsWith("Bearer ") ||
-    authHeader.split(" ")[1] !== API_KEY
-  ) {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return jsonResponse({
+      error: {
+        code: -32001,
+        message: "未授权的访问",
+        data: {
+          error: "缺少有效的 Authorization 请求头",
+        },
+      },
+    }, 401);
+  }
+  // 常量时间字符串比较，避免侧信道攻击
+  const token = authHeader.slice("Bearer ".length);
+  if (token.length !== API_KEY.length || !timingSafeEqual(token, API_KEY)) {
     return jsonResponse({
       error: {
         code: -32001,
@@ -142,6 +152,17 @@ async function verifyRequestAuth(req: Request): Promise<Response | null> {
     }, 401);
   }
   return null;
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const keyBytes = new TextEncoder().encode(a);
+  const valBytes = new TextEncoder().encode(b);
+  let result = 0;
+  for (let i = 0; i < keyBytes.length; i++) {
+    result |= keyBytes[i] ^ valBytes[i];
+  }
+  return result === 0;
 }
 
 function jsonResponse(value: unknown, status = 200): Response {

@@ -1,12 +1,12 @@
 const REDACTION_PATTERNS: Array<[RegExp, string]> = [
   [
-    /((?:access_token|api_key|apikey|apiKey|secret|token|password)=)[^&\s"']+/gi,
+    /((?:access_token|api_key|apikey|apiKey|secret|token|password|refresh_token|client_secret|private_key|auth_token)=)[^&\s"']+/gi,
     "$1[REDACTED]",
   ],
   [/(Authorization\s*:\s*Bearer\s+)[^\s"']+/gi, "$1[REDACTED]"],
   [/(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}/g, "$1[REDACTED]"],
   [
-    /("(?:access_token|apiKey|api_key|secret|token|password)"\s*:\s*")[^"]+(")/gi,
+    /("(?:access_token|apiKey|api_key|secret|token|password|refresh_token|client_secret|private_key)"\s*:\s*")[^"]+(")/gi,
     "$1[REDACTED]$2",
   ],
 ];

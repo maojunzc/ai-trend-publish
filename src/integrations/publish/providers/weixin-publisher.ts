@@ -52,6 +52,7 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
   private static readonly COVER_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
   private static readonly CONTENT_IMAGE_MAX_BYTES = 1024 * 1024;
   private accessToken: WeixinToken | null = null;
+  private tokenPromise: Promise<string> | null = null; // 并发去重锁
   private appId: string | undefined;
   private appSecret: string | undefined;
 
@@ -75,14 +76,27 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
   }
 
   private async ensureAccessToken(): Promise<string> {
-    // 检查现有token是否有效
+    // 如果已有有效token，直接返回（快速路径，无需锁）
     if (
       this.accessToken &&
-      this.accessToken.expiresAt > new Date(Date.now() + 60000) // 预留1分钟余量
+      this.accessToken.expiresAt > new Date(Date.now() + 60000)
     ) {
       return this.accessToken.access_token;
     }
 
+    // 如果已有正在进行的 token 获取请求，复用该 Promise 避免并发重复调用
+    if (this.tokenPromise) {
+      return await this.tokenPromise;
+    }
+
+    // 发起新 token 获取请求，用 tokenPromise 做并发去重
+    this.tokenPromise = this.fetchAccessToken().finally(() => {
+      this.tokenPromise = null;
+    });
+    return await this.tokenPromise;
+  }
+
+  private async fetchAccessToken(): Promise<string> {
     try {
       await this.refresh();
       const response: WeixinAccessTokenResponse = await this.apiClient
@@ -106,6 +120,8 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
 
       return access_token;
     } catch (error) {
+      // 失败时清除 tokenPromise，允许下次重试
+      this.tokenPromise = null;
       logger.error("获取微信access_token失败:", redactError(error));
       throw error;
     }
