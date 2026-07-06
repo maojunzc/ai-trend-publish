@@ -2,11 +2,7 @@
   "workflow": {
     "enabled": true,
     "mode": "server",
-    "server": {
-      "schedule": "0 0,6,12,18 * * *",
-      "host": "212.129.221.67"
-    },
-    "description": "工作流开关。enabled=false 时 GitHub Actions 跳过执行（直接 exit 0）。mode=server 表示由云服务器 cron 驱动，mode=github 表示由 GH Actions 驱动。改此文件 git push 即刻生效。",
+    "description": "工作流开关。enabled=false 时 GitHub Actions 的 scheduled-article.yml 跳过执行（直接 exit 0）。mode=server 表示由云服务器 cron 执行，mode=github 表示由 GH Actions 执行。改此文件 push 到 master 即刻生效。",
     "updatedAt": "2026-07-06T07:00:00Z"
   }
 }
