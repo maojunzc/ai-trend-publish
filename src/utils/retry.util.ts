@@ -65,14 +65,15 @@ export class RetryUtil {
     const useExponentialBackoff = options.useExponentialBackoff ?? true;
 
     let lastError: Error | undefined;
-    let retries = 0;
+    let attempts = 0;
 
     // 第一次执行
     try {
+      attempts++;
       const result = await operation();
       return {
         result,
-        attempts: 0, // 第一次成功，重试次数为0
+        attempts, // 返回总尝试次数（首次成功为 1）
         success: true,
       };
     } catch (error) {
@@ -82,7 +83,7 @@ export class RetryUtil {
       if (lastError instanceof WorkflowTerminateError) {
         return {
           result: undefined as T,
-          attempts: 0, // 终止错误，重试次数为0
+          attempts, // 返回已尝试次数
           success: false,
           error: lastError,
         };
@@ -90,13 +91,13 @@ export class RetryUtil {
     }
 
     // 开始重试
-    while (retries < maxRetries) {
+    while (attempts <= maxRetries) {
       try {
-        retries++;
+        attempts++;
         const result = await operation();
         return {
           result,
-          attempts: retries, // 返回实际重试次数
+          attempts, // 返回总尝试次数
           success: true,
         };
       } catch (error) {
@@ -106,22 +107,22 @@ export class RetryUtil {
         if (lastError instanceof WorkflowTerminateError) {
           return {
             result: undefined as T,
-            attempts: retries, // 返回已重试次数
+            attempts, // 返回已尝试次数
             success: false,
             error: lastError,
           };
         }
 
-        if (retries === maxRetries) {
+        if (attempts > maxRetries) {
           break;
         }
 
         const delay = useExponentialBackoff
-          ? baseDelay * Math.pow(2, retries)
-          : baseDelay * (retries + 1);
+          ? baseDelay * Math.pow(2, attempts)
+          : baseDelay * (attempts + 1);
 
         logger.warn(
-          `重试操作失败 (${retries}/${maxRetries}): ${lastError.message}`,
+          `重试操作失败 (${attempts}/${maxRetries + 1}): ${lastError.message}`,
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
@@ -129,7 +130,7 @@ export class RetryUtil {
 
     return {
       result: undefined as T,
-      attempts: retries, // 返回最终重试次数
+      attempts, // 返回总尝试次数
       success: false,
       error: lastError ?? new Error("未知错误"),
     };

@@ -106,7 +106,7 @@ export class WeixinApiClient {
       }
 
       const weixinError = payload as WeixinErrorResponse;
-      if (weixinError.errcode && weixinError.errcode !== 0) {
+      if (weixinError.errcode !== undefined && weixinError.errcode !== 0) {
         throw new ProviderError({
           provider: "weixin",
           kind: classifyWeixinError(weixinError.errcode),

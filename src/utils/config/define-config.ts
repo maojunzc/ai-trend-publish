@@ -1039,7 +1039,7 @@ function normalizePositiveInteger(value: number | undefined, fallback: number) {
   if (!Number.isFinite(value) || value === undefined) {
     return fallback;
   }
-  return Math.max(1, Math.floor(value));
+  return Math.max(0, Math.floor(value));
 }
 
 function isCompatibleArticleImageModel(

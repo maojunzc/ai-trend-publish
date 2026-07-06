@@ -1,6 +1,9 @@
 // src/utils/image/image-processor.ts
 import { ContentImageUploader } from "@src/core/ports/content-publisher.ts";
 import { SafeImageDownloader } from "@src/utils/image/safe-image-downloader.ts";
+import { Logger } from "@zilla/logger";
+
+const logger = new Logger("weixin-image-processor");
 
 interface ImageValidationResult {
   isValid: boolean;
@@ -92,7 +95,7 @@ export class WeixinImageProcessor {
 
       return output;
     } catch (error) {
-      console.error("Image compression failed:", error);
+      logger.error(`Image compression failed: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -123,13 +126,13 @@ export class WeixinImageProcessor {
 
         let processedImage: Uint8Array | undefined;
         if (imageBuffer.byteLength > WeixinImageProcessor.MAX_IMAGE_SIZE) {
-          console.log(
+          logger.info(
             `图片大小超过1MB (${
               (imageBuffer.byteLength / 1024 / 1024).toFixed(2)
             }MB)，进行压缩...`,
           );
           processedImage = await this.compressImage(imageBuffer);
-          console.log(
+          logger.info(
             `压缩后大小: ${(processedImage.length / 1024 / 1024).toFixed(2)}MB`,
           );
           if (processedImage.byteLength > WeixinImageProcessor.MAX_IMAGE_SIZE) {
@@ -166,7 +169,7 @@ export class WeixinImageProcessor {
           );
         }
       } catch (error) {
-        console.error(`处理图片失败: ${image.originalUrl}`, error);
+        logger.error(`处理图片失败: ${image.originalUrl}`, error);
         results.push({
           originalUrl: image.originalUrl,
           error: error instanceof Error ? error.message : "未知错误",

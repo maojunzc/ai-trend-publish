@@ -118,16 +118,10 @@ export async function runLocalWeixinArticleMatrixDryRun(
       const message = error instanceof Error ? error.message : String(error);
       await stores.runStateStore.failRun(runId, message).catch(() => {});
       console.warn(`[矩阵运行] 账号 ${accountId} 执行失败: ${message}`);
-    } finally {
-      await syncMatrixParentRun(stores.runStateStore, matrixRunId, {
-        artifactStore: stores.artifactStore,
-      }).catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`[矩阵运行] 父批次状态同步失败: ${message}`);
-      });
     }
   }
 
+  // 所有子任务完成后，统一同步父批次状态
   const aggregation = await syncMatrixParentRun(
     stores.runStateStore,
     matrixRunId,

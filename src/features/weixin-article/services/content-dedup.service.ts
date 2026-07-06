@@ -66,29 +66,33 @@ export class WeixinArticleContentDedupService {
       display: ":title | :percent | :completed/:total | :time \n",
     });
     let embedCompleted = 0;
+    const embedProgressLock = new WeakMap<object, Promise<void>>();
 
-    await Promise.all(
-      contents.map(async (content) => {
-        try {
-          const embedding = await this.embeddingModel.createEmbedding(
-            content.content,
-          );
-          contentEmbeddings.set(content.id, embedding.embedding);
-          newVectors.push({
-            content: content.content,
-            vector: embedding.embedding,
-            vectorDim: embedding.embedding.length,
-            vectorType: "article",
-          });
-        } catch (error) {
-          logger.error(
-            `[向量计算] 计算内容 ${content.id} 的向量失败:`,
-            error,
-          );
-        }
-        await embedProgress.render(++embedCompleted);
-      }),
-    );
+    const computeEmbedding = async (content: ScrapedContent) => {
+      try {
+        const embedding = await this.embeddingModel.createEmbedding(
+          content.content,
+        );
+        contentEmbeddings.set(content.id, embedding.embedding);
+        newVectors.push({
+          content: content.content,
+          vector: embedding.embedding,
+          vectorDim: embedding.embedding.length,
+          vectorType: "article",
+        });
+      } catch (error) {
+        logger.error(
+          `[向量计算] 计算内容 ${content.id} 的向量失败:`,
+          error,
+        );
+      }
+    };
+
+    // 使用串行而非并行，避免 ProgressBar 竞态和 embedding API 限流
+    for (const content of contents) {
+      await computeEmbedding(content);
+      await embedProgress.render(++embedCompleted);
+    }
 
     logger.info(`[向量计算] 完成 ${contentEmbeddings.size} 个内容的向量计算`);
 

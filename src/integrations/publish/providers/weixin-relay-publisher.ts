@@ -179,10 +179,14 @@ export class WeixinRelayPublisher
 
 function bytesToBase64(value: ArrayBuffer | Uint8Array): string {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  // 使用 Uint8Array.reduce 逐块编码，避免大数组 spread 栈溢出
   let binary = "";
   const chunkSize = 0x8000;
   for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    const chunk = bytes.slice(index, index + chunkSize);
+    for (let i = 0; i < chunk.length; i++) {
+      binary += String.fromCharCode(chunk[i]);
+    }
   }
   return btoa(binary);
 }

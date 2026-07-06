@@ -87,13 +87,18 @@ export class HttpClient {
         const response = await this.fetchWithTimeout(url, fetchOptions);
 
         if (!response.ok) {
-          throw new HttpError(
+          const error = new HttpError(
             `HTTP ${response.status} - ${response.statusText}`,
             response.status,
             response,
             url,
             fetchOptions.method || "GET",
           );
+          // 4xx 客户端错误不应该重试，直接抛出
+          if (response.status >= 400 && response.status < 500) {
+            throw error;
+          }
+          throw error;
         }
 
         return response;

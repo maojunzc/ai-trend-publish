@@ -172,8 +172,8 @@ export class WorkflowStep {
 
     const match = delay.match(/^(\d+)\s+(second|minute|hour|day)s?$/);
     if (!match) {
-      logger.warn(`Invalid delay format: ${delay}, using 0 as default`);
-      return 0;
+      logger.warn(`Invalid delay format: "${delay}", using 1s as safe default`);
+      return 1000;
     }
 
     const [, value, unit] = match;

@@ -683,7 +683,7 @@ export class WeixinArticleWorkflow {
 
       const maxRevisionRounds = Math.max(
         0,
-        Math.min(2, this.dependencies.config.qualityGate.maxRevisionRounds),
+        this.dependencies.config.qualityGate.maxRevisionRounds,
       );
       if (maxRevisionRounds > 0) {
         const planInputContents = await artifactStore
