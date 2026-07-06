@@ -76,6 +76,7 @@ function validateSourceProviders(
   providers: ArticleFetchProvider[],
   config: Pick<ResolvedTrendPublishConfig, "providers">,
 ): void {
+  let oneConfigured = false;
   for (const provider of providers) {
     if (kind === "query" && !isSearchFetchProvider(provider)) {
       throw new Error(
@@ -88,13 +89,16 @@ function validateSourceProviders(
       );
     }
     const adapter = fetchProviderRegistry.get(provider as FetchProviderId);
-    if (!adapter.isConfigured(config as ResolvedTrendPublishConfig)) {
-      throw new Error(
-        `数据源 ${sourceValue} 需要配置 ${
-          getFetchProviderConfigHint(provider)
-        }`,
-      );
+    if (adapter.isConfigured(config as ResolvedTrendPublishConfig)) {
+      oneConfigured = true;
     }
+  }
+  if (!oneConfigured) {
+    throw new Error(
+      `数据源 ${sourceValue} 的所有候选 provider 均未配置，请配置其中至少一个：${
+        providers.map(getFetchProviderConfigHint).join("、")
+      }`,
+    );
   }
 }
 
