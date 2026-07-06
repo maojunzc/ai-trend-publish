@@ -156,7 +156,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          TS=$(date -u -d "${{ github.run_started_at }}" +"%Y%m%d-%H%M")
+          TS=$(date -u +"%Y%m%d-%H%M")
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "RELEASE_TAG=article-${TS}-${SHORT_SHA}" >> "$GITHUB_ENV"
           echo "RELEASE_NAME=Article Run ${TS}" >> "$GITHUB_ENV"
