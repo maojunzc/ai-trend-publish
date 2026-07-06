@@ -78,7 +78,7 @@ fetchGroups: {
 先运行 `deno task article --dry-run`，确认当天产物里已经出现自定义 RSS 的文章，
 再继续接入正式发布链路。
 
-更多功能开关和必填项见 [配置说明](/configuration)。
+更多功能开关和必填项见 [配置说明](./configuration.md)。
 
 ## 4. 本地启动
 
@@ -122,7 +122,7 @@ docker compose up -d
 Docker 会读取 `./config/trendpublish.config.ts`，dry-run 输出、运行状态和
 artifact 会写到 `./data/temp`，可通过 `/dashboard` 查看。发布镜像已经内置
 dashboard 构建产物，不需要在服务器上运行前端构建。更多部署细节见
-[部署文档](/deployment)。
+[部署文档](./deployment.md)。
 
 ## 6. 触发一次工作流
 

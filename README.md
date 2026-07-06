@@ -563,6 +563,54 @@ relay 只保存自己的 `server.apiKey`，不保存公众号 AppID/AppSecret，
 列表。多公众号时，微信凭证和账号运营信息都在主服务侧维护；relay 只负责固定 IP
 转发微信 API。
 
+## 工作流开关与定时运行
+
+### `workflow.config.json`
+
+项目根目录的 `workflow.config.json` 控制文章工作流的启停与运行模式：
+
+```json
+{
+  "workflow": {
+    "enabled": true,
+    "mode": "server"
+  }
+}
+```
+
+| 字段 | 取值 | 说明 |
+|------|------|------|
+| `enabled` | `true` / `false` | `false` 时 GitHub Actions 的 `scheduled-article.yml` 在第一步检查后直接跳过，不消耗免费额度 |
+| `mode` | `server` / `github` | `server` 由云服务器 cron 驱动；`github` 由 GitHub Actions 驱动 |
+
+修改后 `git push` 即刻生效。手动触发（`workflow_dispatch`）仍可在 Actions 页面执行，不受 `enabled` 影响。
+
+### 服务器 cron 定时运行（推荐生产方案）
+
+部署到云服务器后，推荐用系统 crontab 定时跑 dry-run，完全避开 GitHub Actions 免费额度：
+
+1. **安装 Deno 并拉取项目**
+
+```bash
+curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
+cd /home/ubuntu/ai-trend-publish
+git pull --rebase origin master
+```
+
+2. **配置 `.env`**（AI 凭证、抓取密钥等），并把 `workflow.config.json` 设为 `enabled: true, mode: server`
+
+3. **添加 crontab**（北京时间 8:00 / 14:00 / 20:00 / 次日 2:00）
+
+```bash
+crontab -e
+```
+
+```cron
+0 0,6,12,18 * * * cd /home/ubuntu/ai-trend-publish && /home/ubuntu/.local/bin/deno run -A scripts/run.workflow.ts --dry-run >> /var/log/ai-article.log 2>&1
+```
+
+完整部署脚本见 `scripts/cron-run-article.sh`。
+
 部署细节见 [部署文档](docs/deployment.md)。
 
 ## JSON-RPC API

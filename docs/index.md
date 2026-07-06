@@ -28,16 +28,16 @@ flowchart LR
 
 ### 新用户
 
-1. [快速开始](/getting-started)
-2. [配置说明](/configuration)
-3. [帮助文档](/help)
+1. [快速开始](./getting-started.md)
+2. [配置说明](./configuration.md)
+3. [帮助文档](./help.md)
 
 ### 开发与运维
 
-1. [架构总览](/architecture)
-2. [部署与发布](/deployment)
-3. [Editorial Automation 计划](/editorial-automation)
-4. [JSON-RPC API](/api/json-rpc-api)
+1. [架构总览](./architecture.md)
+2. [部署与发布](./deployment.md)
+3. [Editorial Automation 计划](./editorial-automation.md)
+4. [JSON-RPC API](./api/json-rpc-api.md)
 
 ## 核心能力
 
@@ -51,17 +51,17 @@ flowchart LR
 
 ## 文档目录
 
-- [快速开始](/getting-started)
-- [配置说明](/configuration)
-- [架构总览](/architecture)
-- [Editorial Automation 计划](/editorial-automation)
-- [部署与发布](/deployment)
-- [帮助文档](/help)
-- [JSON-RPC API](/api/json-rpc-api)
-- [钉钉 Webhook 配置](/integrations/dingtalk-webhook-guide)
-- [数据获取 API](/integrations/data-fetching-apis)
-- [Jina AI 集成指南](/integrations/jina-integration-guide)
-- [模板展示](/templates)
+- [快速开始](./getting-started.md)
+- [配置说明](./configuration.md)
+- [架构总览](./architecture.md)
+- [Editorial Automation 计划](./editorial-automation.md)
+- [部署与发布](./deployment.md)
+- [帮助文档](./help.md)
+- [JSON-RPC API](./api/json-rpc-api.md)
+- [钉钉 Webhook 配置](./integrations/dingtalk-webhook-guide.md)
+- [数据获取 API](./integrations/data-fetching-apis.md)
+- [Jina AI 集成指南](./integrations/jina-integration-guide.md)
+- [模板展示](./templates.md)
 
 ## 相关链接
 

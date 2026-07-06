@@ -2,13 +2,13 @@
 
 ## 常用入口
 
-- [快速开始](/getting-started)
-- [配置说明](/configuration)
-- [部署与发布](/deployment)
-- [JSON-RPC API](/api/json-rpc-api)
-- [数据获取 API](/integrations/data-fetching-apis)
-- [钉钉 Webhook 配置指南](/integrations/dingtalk-webhook-guide)
-- [Jina AI 集成指南](/integrations/jina-integration-guide)
+- [快速开始](./getting-started.md)
+- [配置说明](./configuration.md)
+- [部署与发布](./deployment.md)
+- [JSON-RPC API](./api/json-rpc-api.md)
+- [数据获取 API](./integrations/data-fetching-apis.md)
+- [钉钉 Webhook 配置指南](./integrations/dingtalk-webhook-guide.md)
+- [Jina AI 集成指南](./integrations/jina-integration-guide.md)
 
 ## 常见问题
 
