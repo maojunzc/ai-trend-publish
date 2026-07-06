@@ -538,6 +538,64 @@ CI/CD 流程定义在 [`.github/workflows/ci-deploy.yml`](.github/workflows/ci-d
 >
 > dry-run 模式会把 HTML / JSON 产物存为 Actions Artifact（保留 7 天），可在运行详情页下载查看。
 
+### 工作流开关
+
+项目根目录的 `workflow.config.json` 用于控制文章工作流的启停与运行模式：
+
+```json
+{
+  "workflow": {
+    "enabled": true,
+    "mode": "server"
+  }
+}
+```
+
+- `enabled`：`true` 允许执行；`false` 时 GitHub Actions 的 `scheduled-article.yml` 在第一步检查此值后直接跳过，不消耗免费额度。
+- `mode`：`server` 由云服务器 cron 驱动；`github` 由 GitHub Actions 驱动。
+
+修改此文件并 `git push` 即刻生效。手动触发（`workflow_dispatch`）仍可在仓库 Actions 页面执行，不受开关限制。
+
+### 服务器 cron 定时运行（推荐生产方案）
+
+如果已有一台云服务器，推荐使用宿主机 crontab 定时跑文章 dry-run，完全避开 GitHub Actions 免费额度：
+
+1. 在服务器上安装 Deno：
+
+```bash
+curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
+```
+
+2. 克隆或拉取项目，并配置 `.env`：
+
+```bash
+cd /home/ubuntu/ai-trend-publish
+git pull --rebase origin master
+
+cat > .env << 'EOF'
+AI_BASE_URL=https://api.deepseek.com/v1
+AI_API_KEY=your-ai-api-key
+AI_MODEL=deepseek-chat
+SERVER_API_KEY=your-server-key
+FIRECRAWL_API_KEY=your-firecrawl-key
+JINA_API_KEY=your-jina-key
+EOF
+```
+
+3. 添加 crontab（北京时间 8:00 / 14:00 / 20:00 / 次日 2:00）：
+
+```bash
+crontab -e
+```
+
+写入：
+
+```
+0 0,6,12,18 * * * cd /home/ubuntu/ai-trend-publish && /home/ubuntu/.local/bin/deno run -A scripts/run.workflow.ts --dry-run >> /var/log/ai-article.log 2>&1
+```
+
+完整部署脚本见 `scripts/cron-run-article.sh`。
+
 Cloudflare 部署：
 
 ```bash
