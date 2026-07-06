@@ -40,9 +40,11 @@ export class WeixinApiClient {
     url.searchParams.set("grant_type", "client_credential");
     url.searchParams.set("appid", appId);
     url.searchParams.set("secret", appSecret);
-    return await this.requestJson<WeixinAccessTokenResponse>(url, {
+    const result = await this.requestJson<WeixinAccessTokenResponse>(url, {
       method: "GET",
     });
+    validateWeixinFields(result, ["access_token", "expires_in"]);
+    return result;
   }
 
   async postJson<T>(
@@ -96,6 +98,17 @@ export class WeixinApiClient {
       const payload = parseJsonResponse(text, url);
 
       if (!response.ok) {
+        // Check if the response body contains a weixin errcode with more detail
+        const errorPayload = payload as WeixinErrorResponse;
+        if (errorPayload.errcode) {
+          throw new ProviderError({
+            provider: "weixin",
+            kind: classifyWeixinError(errorPayload.errcode),
+            message: `微信 API 错误 ${errorPayload.errcode}: ${
+              errorPayload.errmsg ?? "unknown error"
+            }`,
+          });
+        }
         throw classifyHttpProviderError(
           "weixin",
           response.status,
@@ -115,6 +128,13 @@ export class WeixinApiClient {
               weixinError.errmsg ?? "unknown error"
             }`,
           ),
+        });
+      }
+      if (typeof payload !== "object" || payload === null) {
+        throw new ProviderError({
+          provider: "weixin",
+          kind: "invalid_response",
+          message: `微信 API 返回无效数据类型`,
         });
       }
       return payload as T;
@@ -160,4 +180,27 @@ function classifyWeixinError(errcode: number): ProviderErrorKind {
   if ([45009, 45011].includes(errcode)) return "rate_limit";
   if ([45008, 45028].includes(errcode)) return "quota";
   return "invalid_response";
+}
+
+function validateWeixinFields(
+  payload: unknown,
+  requiredFields: string[],
+): void {
+  if (typeof payload !== "object" || payload === null) {
+    throw new ProviderError({
+      provider: "weixin",
+      kind: "invalid_response",
+      message: `微信 API 返回无效数据类型`,
+    });
+  }
+  const obj = payload as Record<string, unknown>;
+  for (const field of requiredFields) {
+    if (!(field in obj)) {
+      throw new ProviderError({
+        provider: "weixin",
+        kind: "invalid_response",
+        message: `微信 API 返回缺少必需字段: ${field}`,
+      });
+    }
+  }
 }

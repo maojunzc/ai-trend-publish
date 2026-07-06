@@ -8,6 +8,8 @@ import { TextLogoGenerator } from "@src/integrations/image/providers/text-logo-g
 import { AliyunImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-image-generator.ts";
 import { AliyunPosterImageGenerator } from "@src/integrations/image/providers/aliyun/aliyun-poster-image-generator.ts";
 import { MiniMaxImageGenerator } from "@src/integrations/image/providers/minimax/minimax-image-generator.ts";
+import { Logger } from "@zilla/logger";
+const logger = new Logger("image-generator-resolver");
 
 export interface ImageGeneratorTypeMap {
   [ImageGeneratorType.TEXT_LOGO]: TextLogoGenerator;
@@ -59,16 +61,13 @@ export class ImageGeneratorResolver {
    * 刷新所有生成器的配置
    */
   public async refreshAllGenerators(): Promise<void> {
-    const refreshPromises: Promise<void>[] = [];
-
-    for (const [type, generator] of this.generators.entries()) {
-      refreshPromises.push(
-        generator.refresh().catch((error) => {
-          console.error(`刷新图片生成器配置失败 [${type}]:`, error);
-        }),
-      );
+    const refreshPromises = this.generators.map(generator => generator.refresh());
+    const results = await Promise.allSettled(refreshPromises);
+    // Log individual failures but don't rethrow - aggregate results
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.warn(`图片生成器刷新失败: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+      }
     }
-
-    await Promise.allSettled(refreshPromises);
   }
 }

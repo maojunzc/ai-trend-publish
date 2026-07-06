@@ -326,7 +326,7 @@ export class WeixinPublisher implements ContentPublisher, ContentImageUploader {
       );
       return true;
     } catch (error) {
-      if (error instanceof Error && error.message.includes("40164")) {
+      if (error instanceof ProviderError && error.provider === "weixin" && /微信 API 错误 40164/.test(error.message)) {
         return error.message.match(/invalid ip ([^ ]+)/)?.[1] ?? "未知IP";
       }
       throw error;
