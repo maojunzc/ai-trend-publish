@@ -4,17 +4,17 @@ TrendPublish 提供了多种可用于内容发布的模板。
 
 ## 微信文章模板
 
-| 模板名   | 预览                                                                      | 说明                                                               |
-| -------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| default  | ![default](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-default.png)   | 微信原生正式风，适合通用 AI 资讯与日常发布                         |
-| modern   | ![modern](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-modern.png)     | 蓝青科技资讯风，适合趋势速览与产品技术动态                         |
-| tech     | ![tech](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-tech.png)         | 工程技术专栏风，适合技术解读与开发实践                             |
-| mianpro  | ![mianpro](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-mianpro.png)   | AI 日报风，适合每日精选、简报和连续栏目                            |
-| longform | ![longform](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-longform.png) | 杂志长文风，适合观察、评论与专题综述                               |
-| product  | ![product](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-product.png)   | 更新日志风，适合工具更新、版本亮点与产品公告                       |
-| minimal  | ![minimal](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-minimal.png)   | 极简阅读风，适合正式、克制、内容优先的发布                         |
-| darktech | ![darktech](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/weixin-template-darktech.png) | 深色研究笔记风，适合高信息密度的技术摘要                           |
-| dynamic  | 本地预览生成                                                              | AI 根据本次文章内容实时生成公众号内联 HTML，失败自动回退 `minimal` |
+| 模板名   | 说明                                                               |
+| -------- | ------------------------------------------------------------------ |
+| default  | 微信原生正式风，适合通用 AI 资讯与日常发布                         |
+| modern   | 蓝青科技资讯风，适合趋势速览与产品技术动态                         |
+| tech     | 工程技术专栏风，适合技术解读与开发实践                             |
+| mianpro  | AI 日报风，适合每日精选、简报和连续栏目                            |
+| longform | 杂志长文风，适合观察、评论与专题综述                               |
+| product  | 更新日志风，适合工具更新、版本亮点与产品公告                       |
+| minimal  | 极简阅读风，适合正式、克制、内容优先的发布                         |
+| darktech | 深色研究笔记风，适合高信息密度的技术摘要                           |
+| dynamic  | AI 根据本次文章内容实时生成公众号內联 HTML，失败自动回退 `minimal` |
 
 通过 `features.article.renderer.template` 选择微信文章模板：
 

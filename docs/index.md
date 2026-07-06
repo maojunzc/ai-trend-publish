@@ -7,8 +7,6 @@ TrendPublish
 
 它的核心目标不是“自动生成一篇文章”，而是稳定地生产更值得发布的文章：每次运行都有步骤、错误、质量审稿、HTML、图片和配置快照，方便你判断今天是否适合发、为什么值得发、哪里需要人工介入。
 
-![TrendPublish 发布中心](https://raw.githubusercontent.com/maojunzc/ai-trend-publish/main/images/dashboard-publish-center.png)
-
 ## 工作流概览
 
 ```mermaid
@@ -62,8 +60,3 @@ flowchart LR
 - [数据获取 API](./integrations/data-fetching-apis.md)
 - [Jina AI 集成指南](./integrations/jina-integration-guide.md)
 - [模板展示](./templates.md)
-
-## 相关链接
-
-- GitHub: [maojunzc/ai-trend-publish](https://github.com/maojunzc/ai-trend-publish)
-- Discord: <https://github.com/maojunzc/ai-trend-publish/discussions>
