@@ -126,7 +126,18 @@ export class HttpClient {
         );
 
         if (remainingAttempts > 0) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          // 检查 Retry-After header，如果服务端指定了等待时间则优先使用
+          const retryAfter = lastError.response?.headers?.get("Retry-After");
+          let delayMs = retryDelay;
+          if (retryAfter) {
+            const parsed = parseInt(retryAfter, 10);
+            if (!isNaN(parsed)) {
+              delayMs = parsed * 1000; // Retry-After 单位是秒
+            }
+          }
+          // 添加 jitter（±25%）避免惊群
+          const jitter = 1 + (Math.random() - 0.5) * 0.5;
+          await new Promise((resolve) => setTimeout(resolve, delayMs * jitter));
         }
       }
     }

@@ -67,6 +67,8 @@ export class RetryUtil {
     const maxRetries = options.maxRetries ?? 3;
     const baseDelay = options.baseDelay ?? 1000;
     const useExponentialBackoff = options.useExponentialBackoff ?? true;
+    const maxDelay = options.maxDelay ?? 30000;
+    const jitter = options.jitter ?? 0.3;
 
     let lastError: Error | undefined;
     let attempts = 0;
