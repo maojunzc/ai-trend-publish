@@ -1,9 +1,6 @@
 name: Scheduled Article Generation
 
 on:
-  schedule:
-    # 每天 UTC 0点、6点、12点、18点（北京时间 8点、14点、20点、次日2点）
-    - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
     inputs:
       dryRun:
@@ -20,8 +17,30 @@ on:
         default: ""
 
 jobs:
+  check-switch:
+    name: Check workflow switch
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.switch.outputs.enabled }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read workflow switch
+        id: switch
+        run: |
+          if [ -f workflow.config.json ]; then
+            ENABLED=$(jq -r '.workflow.enabled // "false"' workflow.config.json)
+          else
+            ENABLED="false"
+          fi
+          echo "enabled=$ENABLED" >> "$GITHUB_OUTPUT"
+          echo "Switch status: enabled=$ENABLED"
+
   generate:
     name: Run Article Workflow
+    needs: [check-switch]
+    if: needs.check-switch.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
