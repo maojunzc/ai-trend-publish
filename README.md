@@ -14,7 +14,6 @@ dry-run 产物或创建微信公众号草稿。
 
 ![star](https://img.shields.io/github/stars/maojunzc/ai-trend-publish?style=social)
 
-示例公众号：**示例公众号**
 
 社区交流：
 
@@ -599,8 +598,7 @@ curl -X POST http://localhost:8000/api/workflow \
 
 ## 社区与贡献
 
-- Discord: [https://discord.gg/mrZvBHNawS](https://discord.gg/mrZvBHNawS)
-- QQ 群：TrendPublish-1
+- Discord: [https://github.com/maojunzc/ai-trend-publish/discussions](https://github.com/maojunzc/ai-trend-publish/discussions)
 
 欢迎提交 Issue 和 Pull Request。建议在提交前先运行：
 
@@ -611,10 +609,6 @@ deno task verify
 ## 致谢
 
 感谢社区贡献者对项目的支持。
-
-## Star History
-
-[Star History Chart](https://star-history.com/#maojunzc/ai-trend-publish&Date)
 
 ## License
 

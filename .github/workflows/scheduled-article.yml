@@ -23,6 +23,8 @@ jobs:
   generate:
     name: Run Article Workflow
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -147,3 +149,59 @@ jobs:
             src/temp/
             !src/temp/.gitkeep
           retention-days: 7
+
+      - name: Prepare release assets
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TS=$(date -u -d "${{ github.run_started_at }}" +"%Y%m%d-%H%M")
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "RELEASE_TAG=article-${TS}-${SHORT_SHA}" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=Article Run ${TS}" >> "$GITHUB_ENV"
+
+          # 将 src/temp/runs/ 下本 run 的产物打包为 zip
+          RUN_DIR="src/temp/runs"
+          ZIP_FILE="article-output-${TS}-${SHORT_SHA}.zip"
+          if [ -d "$RUN_DIR" ] && [ "$(find "$RUN_DIR" -maxdepth 1 -type d | wc -l)" -gt 1 ]; then
+            cd src/temp
+            zip -r "../../${ZIP_FILE}" . -x ".gitkeep"
+            cd ../..
+          fi
+
+          ls -la *.zip 2>/dev/null || echo "(no zip produced)"
+
+      - name: Create GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE="article-output-*.zip"
+          if ! ls ${ZIP_FILE} 1>/dev/null 2>&1; then
+            echo "No zip file found, skipping release."
+            exit 0
+          fi
+
+          DRY_RUN_FLAG="--prerelease"
+          BODY_PREFIX="**Dry-run preview**"
+          if [ "${{ github.event.inputs.dryRun }}" = "false" ]; then
+            DRY_RUN_FLAG=""
+            BODY_PREFIX="**正式发布**"
+          fi
+
+          # shell 通配符展开 zip 文件名
+          ZIP_PATH=$(ls ${ZIP_FILE} | head -1)
+
+          gh release create "$RELEASE_TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_NAME" \
+            --notes "$(printf '%s\n- Run: %s\n- Workflow: %s\n- Commit: %s\n' \
+              "$BODY_PREFIX" \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              "$GITHUB_WORKFLOW" \
+              "$GITHUB_SHA")" \
+            $DRY_RUN_FLAG \
+            "$ZIP_PATH"

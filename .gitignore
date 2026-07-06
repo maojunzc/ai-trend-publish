@@ -6,20 +6,14 @@ cloudflare-token.local
 .vercel
 .wrangler/
 .devcontainer.json
-dist
-
-output
-temp
+dist/
 .cursor
-*.bak
-*.exe
 
 # Build output
 dist/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/.vitepress/.temp/
-*.exe
 *-mac-x64
 *-mac-arm64
 *-linux-x64
@@ -64,3 +58,5 @@ tmp/
 
 # CI/CD
 ai-trend-publish.tar.gz
+article-output-*.zip
+nul
